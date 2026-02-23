@@ -86,10 +86,7 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.black,
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 14,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
@@ -107,9 +104,7 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
 
         // if (isScanning)
         //   const SizedBox(height: 24),
-
-        if (isScanning)
-          ScanningIndicator(),
+        if (isScanning) ScanningIndicator(),
 
         const SizedBox(height: 10),
 
@@ -119,8 +114,7 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
             itemCount: devices.length,
             itemBuilder: (context, index) {
               final device = devices[index];
-              final isConnected =
-                  connectedDevice?.remoteId == device.remoteId;
+              final isConnected = connectedDevice?.remoteId == device.remoteId;
 
               return AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
@@ -128,10 +122,7 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
                 decoration: BoxDecoration(
                   color: isConnected ? Colors.black : Colors.white,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.black,
-                    width: 1.5,
-                  ),
+                  border: Border.all(color: Colors.black, width: 1.5),
                 ),
                 child: InkWell(
                   splashColor: Colors.black.withOpacity(0.05),
@@ -186,20 +177,16 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
                         ),
 
                         if (isConnected)
-                          const Icon(
-                            Icons.check_circle,
-                            color: Colors.white,
-                          ),
+                          const Icon(Icons.check_circle, color: Colors.white),
                       ],
                     ),
                   ),
                 ),
               );
             },
-          )
+          ),
         ),
       ],
     );
   }
 }
-
