@@ -59,19 +59,45 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
   }
 
   Future<void> _connect(BluetoothDevice device) async {
+    if (isConnecting) return;
+
     setState(() => isConnecting = true);
 
     try {
-      await device.connect();
-      connectedDevice = device;
+      // 🔁 If tapping the already connected device → disconnect
+      if (connectedDevice?.remoteId == device.remoteId) {
+        await device.disconnect();
+        setState(() => connectedDevice = null);
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Connected successfully")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Printer disconnected", textAlign: TextAlign.center,),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      } else {
+        // 🔌 If another device is already connected → disconnect first
+        if (connectedDevice != null) {
+          await connectedDevice!.disconnect();
+        }
+
+        await device.connect();
+        setState(() => connectedDevice = device);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Printer connected successfully", textAlign: TextAlign.center,),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Connection failed: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Connection error: $e"),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
 
     setState(() => isConnecting = false);
@@ -111,7 +137,7 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
 
         const SizedBox(height: 10),
 
-        Container(
+        SizedBox(
           height: (MediaQuery.of(context).size.height)*0.65,
           child: ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
