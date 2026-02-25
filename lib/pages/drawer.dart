@@ -11,6 +11,8 @@ enum AppView {
   labelMaker,
   funMode,
   settings,
+  todo,
+  qr
 }
 
 class DrawerPage extends StatefulWidget {
@@ -37,6 +39,10 @@ class _DrawerPageState extends State<DrawerPage> {
         return const Center(child: HomePage());
       case AppView.settings:
         return const Center(child: HomePage());
+      case AppView.todo:
+        return const Center(child: HomePage());
+      case AppView.qr:
+        return const Center(child: HomePage());
     }
   }
 
@@ -54,6 +60,10 @@ class _DrawerPageState extends State<DrawerPage> {
         return "I Own a Thermal Printer";
       case AppView.settings:
         return "Settings";
+      case AppView.todo:
+        return "To-Do";
+      case AppView.qr:
+        return "QR Printer";
     }
   }
 
@@ -168,6 +178,44 @@ class _DrawerPageState extends State<DrawerPage> {
               ),
               onTap: () {
                 setState(() => currentView = AppView.labelMaker);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+
+              selected: currentView == AppView.todo,
+              selectedTileColor: Colors.black,
+              selectedColor: Colors.white,
+              leading: const Icon(Icons.download_done_outlined),
+              title: Text(
+                "To-Do",
+                style: GoogleFonts.spaceMono(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  //color: Colors.black,
+                ),
+              ),
+              onTap: () {
+                setState(() => currentView = AppView.todo);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+
+              selected: currentView == AppView.qr,
+              selectedTileColor: Colors.black,
+              selectedColor: Colors.white,
+              leading: const Icon(Icons.qr_code_rounded),
+              title: Text(
+                "QR Printer",
+                style: GoogleFonts.spaceMono(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  //color: Colors.black,
+                ),
+              ),
+              onTap: () {
+                setState(() => currentView = AppView.qr);
                 Navigator.pop(context);
               },
             ),
