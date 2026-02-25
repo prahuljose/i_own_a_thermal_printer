@@ -4,6 +4,8 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:i_own_a_thermal_printer/widgets/scanning_printer_animation.dart';
 
+import '../widgets/test_print.dart';
+
 class ConnectPrinter extends StatefulWidget {
   // methods...
   const ConnectPrinter({super.key});
@@ -78,6 +80,7 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
   @override
   Widget build(BuildContext context) {
     return Column(
+      mainAxisAlignment: MainAxisAlignment.start,
       children: [
         const SizedBox(height: 12),
 
@@ -108,7 +111,8 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
 
         const SizedBox(height: 10),
 
-        Expanded(
+        Container(
+          height: (MediaQuery.of(context).size.height)*0.65,
           child: ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             itemCount: devices.length,
@@ -186,6 +190,45 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
             },
           ),
         ),
+        //const SizedBox(height: 5),
+
+        if (connectedDevice != null) ...[
+          const SizedBox(height: 12),
+
+          ElevatedButton.icon(
+            onPressed: isConnecting
+                ? null
+                : () async {
+              if (connectedDevice != null) {
+                await testPrint(connectedDevice!);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 14,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: const BorderSide(color: Colors.black, width: 1.5),
+              ),
+              elevation: 0,
+            ),
+            icon: const Icon(Icons.print),
+            label: Text(
+              "TEST PRINT",
+              style: GoogleFonts.spaceMono(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+        ],
       ],
     );
   }
