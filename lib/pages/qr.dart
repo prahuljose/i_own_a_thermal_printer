@@ -13,11 +13,12 @@ class QrPage extends StatefulWidget {
 }
 
 class _QrPageState extends State<QrPage> {
-
   bool includeLink = false;
   BluetoothDevice? connectedDevice;
   bool isCheckingConnection = true;
-  final TextEditingController qrController = TextEditingController(text: "https://youtu.be/dQw4w9WgXcQ");
+  final TextEditingController qrController = TextEditingController(
+    text: "https://youtu.be/dQw4w9WgXcQ",
+  );
 
   @override
   void initState() {
@@ -55,9 +56,9 @@ class _QrPageState extends State<QrPage> {
   }
 
   Future<void> _sendInChunks(
-      BluetoothCharacteristic characteristic,
-      List<int> data,
-      ) async {
+    BluetoothCharacteristic characteristic,
+    List<int> data,
+  ) async {
     const chunkSize = 20;
 
     for (int i = 0; i < data.length; i += chunkSize) {
@@ -72,7 +73,7 @@ class _QrPageState extends State<QrPage> {
   // ===============================
   // PRINT FUNCTION
   // ===============================
-  Future<void> _printQR(String qrData) async {
+  Future<void> _printQR(String qrData, String qrText) async {
     if (connectedDevice == null) return;
 
     try {
@@ -88,13 +89,28 @@ class _QrPageState extends State<QrPage> {
             final generator = Generator(PaperSize.mm58, profile);
 
             List<int> bytes = [];
+            bytes += generator.reset();
             //bytes += generator.text("Device Name:");
 
             bytes += generator.qrcode(
               qrData,
-              size: QRSize.Size8,   // 🔥 increase size
-              cor: QRCorrection.H,  // high error correction
+              size: QRSize.Size8, // 🔥 increase size
+              cor: QRCorrection.H, // high error correction
             );
+
+            if (includeLink) {
+              bytes += generator.feed(2);
+              bytes += generator.text(
+                qrText,
+                styles: const PosStyles(
+                  align: PosAlign.center,
+                  //bold: true,
+                  //height: PosTextSize.size2,
+                  //width: PosTextSize.size2,
+                ),
+              );
+            }
+
             bytes += generator.cut();
 
             await _sendInChunks(characteristic, bytes);
@@ -221,7 +237,7 @@ class _QrPageState extends State<QrPage> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
+        child: ListView(
           children: [
             TextField(
               controller: qrController,
@@ -254,23 +270,17 @@ class _QrPageState extends State<QrPage> {
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(
-                    color: Colors.black,
-                    width: 1.5,
-                  ),
+                  borderSide: const BorderSide(color: Colors.black, width: 1.5),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(
-                    color: Colors.black,
-                    width: 2,
-                  ),
+                  borderSide: const BorderSide(color: Colors.black, width: 2),
                 ),
               ),
             ),
             const SizedBox(height: 20),
 
-            if (qrController.text.isNotEmpty)...[
+            if (qrController.text.isNotEmpty) ...[
               Column(
                 children: [
                   Text(
@@ -279,16 +289,57 @@ class _QrPageState extends State<QrPage> {
                     style: GoogleFonts.spaceMono(
                       fontSize: 15,
                       letterSpacing: 1.2,
-                      color: Colors.black87,
+                      color: Colors.black,
                     ),
                   ),
 
-                  QrImageView(data: qrController.text, size: 125),
+                  QrImageView(data: qrController.text, size: 200),
+                  if (includeLink) ...[
+                    Text(
+                      qrController.text,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.spaceMono(
+                        fontSize: 15,
+                        letterSpacing: 1.2,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
                 ],
-              )
+              ),
             ],
 
             const Spacer(),
+            const SizedBox(height: 30),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  includeLink = !includeLink;
+                });
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                decoration: BoxDecoration(
+                  color: includeLink ? Colors.black : Colors.white,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.black, width: 1.5),
+                ),
+                child: Center(
+                  child: Text(
+                    includeLink ? "TEXT INCLUDED" : "INCLUDE TEXT",
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                      color: includeLink ? Colors.white : Colors.black,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            SizedBox(height: 10),
 
             SizedBox(
               width: double.infinity,
@@ -301,7 +352,10 @@ class _QrPageState extends State<QrPage> {
                         elevation: 0,
                         behavior: SnackBarBehavior.floating,
                         shape: RoundedRectangleBorder(
-                          side: const BorderSide(color: Colors.black, width: 1.5),
+                          side: const BorderSide(
+                            color: Colors.black,
+                            width: 1.5,
+                          ),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         content: Text(
@@ -320,7 +374,7 @@ class _QrPageState extends State<QrPage> {
                     return;
                   }
 
-                  _printQR(qrController.text.trim());
+                  _printQR(qrController.text.trim(), qrController.text.trim());
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
@@ -337,7 +391,11 @@ class _QrPageState extends State<QrPage> {
                   disabledBackgroundColor: Colors.white,
                   disabledForegroundColor: Colors.black38,
                 ),
-                icon: const Icon(Icons.qr_code_2_outlined, color: Colors.black, size: 20,),
+                icon: const Icon(
+                  Icons.qr_code_2_outlined,
+                  color: Colors.black,
+                  size: 20,
+                ),
                 label: Text(
                   "Print QR",
                   textAlign: TextAlign.center,
@@ -356,4 +414,3 @@ class _QrPageState extends State<QrPage> {
     );
   }
 }
-
