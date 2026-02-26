@@ -29,6 +29,7 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
 
   Future<void> _init() async {
     await _requestPermissions();
+    _autoReconnectPrinter();
     await _startScan();
   }
 
@@ -63,8 +64,6 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
     if (isConnecting) return;
 
     setState(() => isConnecting = true);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('saved_printer_id', device.remoteId.str);
 
     try {
       // 🔁 If tapping the already connected device → disconnect
@@ -88,6 +87,8 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
 
         await device.connect();
         setState(() => connectedDevice = device);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('saved_printer_id', device.remoteId.str);
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -106,6 +107,36 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
     }
 
     setState(() => isConnecting = false);
+  }
+
+  bool isCheckingConnection = true;
+
+  Future<void> _autoReconnectPrinter() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedId = prefs.getString('saved_printer_id');
+
+    if (savedId == null) {
+      setState(() => isCheckingConnection = false);
+      return;
+    }
+
+    try {
+      final bondedDevices = await FlutterBluePlus.bondedDevices;
+
+      final device = bondedDevices.firstWhere(
+            (d) => d.remoteId.str == savedId,
+      );
+
+      if (!device.isConnected) {
+        await device.connect(autoConnect: false);
+      }
+
+      connectedDevice = device;
+    } catch (e) {
+      connectedDevice = null;
+    }
+
+    setState(() => isCheckingConnection = false);
   }
 
   @override
