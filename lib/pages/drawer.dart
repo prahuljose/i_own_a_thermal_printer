@@ -13,7 +13,8 @@ enum AppView {
   funMode,
   settings,
   todo,
-  qr
+  qr,
+  love
 }
 
 class DrawerPage extends StatefulWidget {
@@ -44,6 +45,8 @@ class _DrawerPageState extends State<DrawerPage> {
         return const Center(child: HomePage());
       case AppView.qr:
         return const Center(child: QrPage());
+      case AppView.love:
+        return const Center(child: QrPage());
     }
   }
 
@@ -65,6 +68,8 @@ class _DrawerPageState extends State<DrawerPage> {
         return "To-Do";
       case AppView.qr:
         return "QR Printer";
+      case AppView.love:
+        return "Awww <3";
     }
   }
 
@@ -255,6 +260,24 @@ class _DrawerPageState extends State<DrawerPage> {
               ),
               onTap: () {
                 setState(() => currentView = AppView.settings);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              selected: currentView == AppView.love,
+              selectedTileColor: Colors.black,
+              selectedColor: Colors.white,
+              leading: const Icon(Icons.rate_review),
+              title: Text(
+                "Show some 🖤",
+                style: GoogleFonts.spaceMono(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  //color: Colors.black,
+                ),
+              ),
+              onTap: () {
+                setState(() => currentView = AppView.love);
                 Navigator.pop(context);
               },
             ),
