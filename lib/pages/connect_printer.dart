@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:i_own_a_thermal_printer/widgets/scanning_printer_animation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../widgets/test_print.dart';
 
@@ -62,12 +63,16 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
     if (isConnecting) return;
 
     setState(() => isConnecting = true);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('saved_printer_id', device.remoteId.str);
 
     try {
       // 🔁 If tapping the already connected device → disconnect
       if (connectedDevice?.remoteId == device.remoteId) {
         await device.disconnect();
         setState(() => connectedDevice = null);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('saved_printer_id');
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

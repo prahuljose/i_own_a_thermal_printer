@@ -125,8 +125,9 @@ Future<void> testPrint(BluetoothDevice device) async {
   bytes += generator.text('1234567890');
   bytes += generator.feed(1);
   bytes += generator.qrcode(
-    'https://politeweather.app',
-    size: QRSize.Size4,
+    'https://youtu.be/dQw4w9WgXcQ',
+    size: QRSize.Size8,   // 🔥 increase size
+    cor: QRCorrection.H,  // high error correction
   );
   bytes += generator.feed(2);
 
