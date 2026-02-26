@@ -113,7 +113,9 @@ class _QrPageState extends State<QrPage> {
 
             bytes += generator.cut();
 
+            _showLoadingDialog();
             await _sendInChunks(characteristic, bytes);
+            Navigator.of(context).pop(); // close dialog
 
             //await characteristic.write(bytes, withoutResponse: true);
             return;
@@ -129,6 +131,46 @@ class _QrPageState extends State<QrPage> {
         context,
       ).showSnackBar(const SnackBar(content: Text("Print failed")));
     }
+  }
+
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // prevents closing manually
+      builder: (_) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: Colors.black, width: 1.5),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                "PRINTING...",
+                style: GoogleFonts.spaceMono(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                  color: Colors.black,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
