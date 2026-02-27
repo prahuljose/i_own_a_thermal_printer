@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:i_own_a_thermal_printer/pages/connect_printer.dart';
 import 'package:i_own_a_thermal_printer/pages/home_page.dart';
 import 'package:i_own_a_thermal_printer/pages/qr.dart';
+import 'package:i_own_a_thermal_printer/pages/settings_page.dart';
 
 enum AppView {
   home,
@@ -40,13 +41,13 @@ class _DrawerPageState extends State<DrawerPage> {
       case AppView.home:
         return const Center(child: HomePage());
       case AppView.settings:
-        return const Center(child: HomePage());
+        return const Center(child: SettingsPage());
       case AppView.todo:
         return const Center(child: HomePage());
       case AppView.qr:
         return const Center(child: QrPage());
       case AppView.love:
-        return const Center(child: QrPage());
+        return const Center(child: SettingsPage());
     }
   }
 

@@ -179,7 +179,51 @@ class _QrPageState extends State<QrPage> {
     // LOADING SCREEN
     // ===============================
     if (isCheckingConnection) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(body: Center(
+          child:
+          Padding(
+            padding: EdgeInsetsGeometry.symmetric(horizontal: 25),
+            child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Colors.black,
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    "Attempting to connect to previously saved printer.",
+                    textAlign: TextAlign.center,
+                    softWrap: true,
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                      color: Colors.black,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ),
+      ),
+      );
     }
 
     // ===============================
