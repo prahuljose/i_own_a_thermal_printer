@@ -145,6 +145,38 @@ Future<void> testPrint(BluetoothDevice device) async {
   // bytes += generator.barcode(
   //   Barcode.ean13('5901234123457'),
   // );
+
+  bytes += generator.text(
+    '[upcA Barcode]',
+    styles: const PosStyles(align: PosAlign.left),
+  );
+
+  final List<int> barData = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1];
+  bytes = bytes + generator.barcode(Barcode.upcA(barData), align: PosAlign.center, textPos: BarcodeText.above);
+
+  bytes += generator.feed(1);
+
+  bytes += generator.text(
+    '[ean13 Barcode]',
+    styles: const PosStyles(align: PosAlign.left),
+  );
+
+  final List<int> bar1Data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2];
+  bytes = bytes + generator.barcode(Barcode.ean13(bar1Data), align: PosAlign.center, textPos: BarcodeText.above);
+
+  bytes += generator.feed(1);
+
+  bytes += generator.text(
+    '[ean8 Barcode]',
+    styles: const PosStyles(align: PosAlign.left),
+  );
+
+  final List<int> bar2Data = [1, 2, 3, 4, 5, 6, 7];
+  bytes = bytes + generator.barcode(Barcode.ean8(bar2Data), align: PosAlign.center, textPos: BarcodeText.above);
+
+
+
+  bytes += generator.feed(1);
   bytes += generator.text(
     'Connected via BLE',
     styles: const PosStyles(align: PosAlign.center),
