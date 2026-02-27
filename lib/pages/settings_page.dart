@@ -13,12 +13,45 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
-    getOption();
+    getRollWidthOption();
+    _loadPaperFeedValues();
   }
 
   bool currentOptionIs58mm = true;
+  double leadingPaperFeed = 0;
+  double trailingPaperFeed = 0;
 
-  Future<void> getOption() async {
+  Future<void> _loadPaperFeedValues() async {
+    final prefs = await SharedPreferences.getInstance();
+    final leading = prefs.getDouble('saved_leading_paper_feed');
+    final trailing = prefs.getDouble('saved_trailing_paper_feed');
+
+    if (!mounted) return;
+
+    setState(() {
+      if (leading == null) {
+        prefs.setDouble('saved_leading_paper_feed', 0);
+        leadingPaperFeed = 0;
+      } else {
+        leadingPaperFeed = leading;
+      }
+
+      if (trailing == null) {
+        prefs.setDouble('saved_trailing_paper_feed', 0);
+        trailingPaperFeed = 0;
+      } else {
+        trailingPaperFeed = trailing;
+      }
+    });
+  }
+
+  Future<void> _setPaperFeedValues() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('saved_leading_paper_feed', leadingPaperFeed);
+    await prefs.setDouble('saved_trailing_paper_feed', trailingPaperFeed);
+  }
+
+  Future<void> getRollWidthOption() async {
     final prefs = await SharedPreferences.getInstance();
     final savedOption = prefs.getString('saved_printer_option');
 
@@ -52,9 +85,9 @@ class _SettingsPageState extends State<SettingsPage> {
         padding: EdgeInsetsGeometry.symmetric(horizontal: 32),
         child: ListView(
           children: [
-            SizedBox(height: 20),
+            const Divider(color: Colors.black, thickness: 1.5, height: 50),
             Text(
-              " Roll Width:",
+              "Roll Width:",
               style: GoogleFonts.spaceMono(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
@@ -97,36 +130,34 @@ class _SettingsPageState extends State<SettingsPage> {
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: () {
-                            if (!currentOptionIs58mm)
-                              {
-                                ScaffoldMessenger.of(context).clearSnackBars();
-                                ScaffoldMessenger.of(context).showSnackBar(
-
-                                  SnackBar(
-                                    backgroundColor: Colors.black,
-                                    elevation: 0,
-                                    behavior: SnackBarBehavior.floating,
-                                    shape: RoundedRectangleBorder(
-                                      side: const BorderSide(
-                                        color: Colors.white12,
-                                        width: 1.5,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
+                            if (!currentOptionIs58mm) {
+                              ScaffoldMessenger.of(context).clearSnackBars();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  backgroundColor: Colors.black,
+                                  elevation: 0,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                    side: const BorderSide(
+                                      color: Colors.white12,
+                                      width: 1.5,
                                     ),
-                                    content: Text(
-                                      "58mm roll width set",
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.spaceMono(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.8,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    duration: Duration(seconds: 1),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                );
-                              }
+                                  content: Text(
+                                    "58mm roll width set",
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.spaceMono(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.8,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  duration: Duration(seconds: 1),
+                                ),
+                              );
+                            }
                             setState(() {
                               currentOptionIs58mm = true;
                             });
@@ -154,9 +185,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: () {
-
-                            if (currentOptionIs58mm)
-                            {
+                            if (currentOptionIs58mm) {
                               ScaffoldMessenger.of(context).clearSnackBars();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
@@ -211,31 +240,41 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
             ),
+            const Divider(color: Colors.black, thickness: 1.5, height: 50),
+            Text(
+              "Leading Feed Buffer:",
+              style: GoogleFonts.spaceMono(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.1,
+                color: Colors.black,
+              ),
+            ),
+            Text(
+              "How much extra blank paper needs to be printed first.",
+              style: GoogleFonts.spaceMono(
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.1,
+                color: Colors.black,
+              ),
+            ),
+            SizedBox(height: 5),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
-                Text(
-                  "PRINT INTENSITY",
-                  style: GoogleFonts.spaceMono(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
-                    color: Colors.black,
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
+                //const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.black, width: 1.5),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Column(
                     children: [
-
                       SliderTheme(
                         data: SliderTheme.of(context).copyWith(
                           activeTrackColor: Colors.black,
@@ -251,20 +290,22 @@ class _SettingsPageState extends State<SettingsPage> {
                           min: 0,
                           max: 5,
                           divisions: 5,
-                          value: 2,
+                          value: leadingPaperFeed,
                           onChanged: (value) {
-                            // setState(() {
-                            //   intensityLevel = value;
-                            // });
-                            //_saveSliderValue(value);
+                            setState(() {
+                              leadingPaperFeed = value;
+                            });
+                          },
+                          onChangeEnd: (value) {
+                            _setPaperFeedValues();
                           },
                         ),
                       ),
 
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 3),
 
                       Text(
-                        "LEVEL ${2.toInt()}",
+                        "Leading Feed ${leadingPaperFeed.toInt()}",
                         style: GoogleFonts.spaceMono(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
@@ -276,7 +317,88 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
               ],
-            )
+            ),
+            //SizedBox(height: 20),
+            const Divider(color: Colors.black, thickness: 1.5, height: 50),
+            Text(
+              "Trailing Feed Buffer:",
+              style: GoogleFonts.spaceMono(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.1,
+                color: Colors.black,
+              ),
+            ),
+            Text(
+              "How much extra blank paper needs to be printed at the end.",
+              style: GoogleFonts.spaceMono(
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.1,
+                color: Colors.black,
+              ),
+            ),
+            SizedBox(height: 5),
+
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                //const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.black, width: 1.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          activeTrackColor: Colors.black,
+                          inactiveTrackColor: Colors.black26,
+                          thumbColor: Colors.black,
+                          overlayColor: Colors.black12,
+                          trackHeight: 2,
+                          thumbShape: const RoundSliderThumbShape(
+                            enabledThumbRadius: 8,
+                          ),
+                        ),
+                        child: Slider(
+                          min: 0,
+                          max: 5,
+                          divisions: 5,
+                          value: trailingPaperFeed,
+                          onChanged: (value) {
+                            setState(() {
+                              trailingPaperFeed = value;
+                            });
+                          },
+                          onChangeEnd: (value) {
+                            _setPaperFeedValues();
+                          },
+                        ),
+                      ),
+
+                      const SizedBox(height: 3),
+
+                      Text(
+                        "Trailing Feed ${trailingPaperFeed.toInt()}",
+                        style: GoogleFonts.spaceMono(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Divider(color: Colors.black, thickness: 1.5, height: 50),
           ],
         ),
       ),
