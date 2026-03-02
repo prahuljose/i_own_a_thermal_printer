@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:i_own_a_thermal_printer/pages/drawer.dart';
+import 'package:i_own_a_thermal_printer/widgets/app_preferences.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -11,6 +12,8 @@ void main() {
       statusBarIconBrightness: Brightness.dark,
     ),
   );
+
+  await AppPreferences.init();
 
   runApp(const MyApp());
 }

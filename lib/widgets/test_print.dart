@@ -1,9 +1,16 @@
 import 'package:esc_pos_utils/esc_pos_utils.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'app_preferences.dart';
 
 Future<void> testPrint(BluetoothDevice device) async {
   // 1️⃣ Discover services
   List<BluetoothService> services = await device.discoverServices();
+
+
+  //no need to call init again, because we already called it on void (main)
+  //await AppPreferences.init();
 
   BluetoothCharacteristic? writeChar;
 
@@ -38,7 +45,9 @@ Future<void> testPrint(BluetoothDevice device) async {
 
   // 2️⃣ Generate receipt
   final profile = await CapabilityProfile.load();
-  final generator = Generator(PaperSize.mm58, profile);
+  final paperSize = AppPreferences.is58mm ? PaperSize.mm58 : PaperSize.mm80;
+
+  final generator = Generator(paperSize, profile);
 
   final now = DateTime.now();
   final connectionState = device.connectionState.toString();
@@ -46,6 +55,9 @@ Future<void> testPrint(BluetoothDevice device) async {
   List<int> bytes = [];
 
   bytes += generator.reset();
+
+  // Leading buffer
+  bytes += generator.feed(AppPreferences.leadingFeed.toInt());
 
   bytes += generator.text(
     'TEST PRINT',
@@ -126,8 +138,8 @@ Future<void> testPrint(BluetoothDevice device) async {
   bytes += generator.feed(1);
   bytes += generator.qrcode(
     'https://youtu.be/dQw4w9WgXcQ',
-    size: QRSize.Size8,   // 🔥 increase size
-    cor: QRCorrection.H,  // high error correction
+    size: QRSize.Size8, // 🔥 increase size
+    cor: QRCorrection.H, // high error correction
   );
   bytes += generator.feed(2);
 
@@ -152,7 +164,13 @@ Future<void> testPrint(BluetoothDevice device) async {
   );
 
   final List<int> barData = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1];
-  bytes = bytes + generator.barcode(Barcode.upcA(barData), align: PosAlign.center, textPos: BarcodeText.above);
+  bytes =
+      bytes +
+      generator.barcode(
+        Barcode.upcA(barData),
+        align: PosAlign.center,
+        textPos: BarcodeText.above,
+      );
 
   bytes += generator.feed(1);
 
@@ -162,7 +180,13 @@ Future<void> testPrint(BluetoothDevice device) async {
   );
 
   final List<int> bar1Data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2];
-  bytes = bytes + generator.barcode(Barcode.ean13(bar1Data), align: PosAlign.center, textPos: BarcodeText.above);
+  bytes =
+      bytes +
+      generator.barcode(
+        Barcode.ean13(bar1Data),
+        align: PosAlign.center,
+        textPos: BarcodeText.above,
+      );
 
   bytes += generator.feed(1);
 
@@ -172,9 +196,13 @@ Future<void> testPrint(BluetoothDevice device) async {
   );
 
   final List<int> bar2Data = [1, 2, 3, 4, 5, 6, 7];
-  bytes = bytes + generator.barcode(Barcode.ean8(bar2Data), align: PosAlign.center, textPos: BarcodeText.above);
-
-
+  bytes =
+      bytes +
+      generator.barcode(
+        Barcode.ean8(bar2Data),
+        align: PosAlign.center,
+        textPos: BarcodeText.above,
+      );
 
   bytes += generator.feed(1);
   bytes += generator.text(
@@ -182,8 +210,10 @@ Future<void> testPrint(BluetoothDevice device) async {
     styles: const PosStyles(align: PosAlign.center),
   );
 
-  bytes += generator.feed(4);
-  //bytes += generator.cut();
+// Trailing buffer
+  bytes += generator.feed(AppPreferences.trailingFeed.toInt());
+
+  bytes += generator.cut();
 
   // 3️⃣ Send in chunks (VERY important for BLE)
   await _sendInChunks(writeChar, bytes);

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -5,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:i_own_a_thermal_printer/widgets/scanning_printer_animation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../widgets/app_preferences.dart';
 import '../widgets/test_print.dart';
 
 class ConnectPrinter extends StatefulWidget {
@@ -24,7 +26,20 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
   @override
   void initState() {
     super.initState();
+    getOptions();
     _init();
+  }
+
+  Future<void> getOptions() async {
+    await AppPreferences.init();
+    if (!mounted) return;
+    setState(() {});
+
+    if (kDebugMode) {
+      print(" is58mm: ************** : ${AppPreferences.is58mm} ");
+      print(" leading: ************** : ${AppPreferences.leadingFeed} ");
+      print(" trailing: ************** : ${AppPreferences.trailingFeed} ");
+    }
   }
 
   Future<void> _init() async {

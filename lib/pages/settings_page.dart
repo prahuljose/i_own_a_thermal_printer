@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:i_own_a_thermal_printer/widgets/app_preferences.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -11,72 +13,92 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   @override
-  void initState() {
+void initState() {
     super.initState();
-    getRollWidthOption();
-    _loadPaperFeedValues();
+    getOptions();
+    // getRollWidthOption();
+    //_loadPaperFeedValues();
   }
 
   bool currentOptionIs58mm = true;
-  double leadingPaperFeed = 0;
-  double trailingPaperFeed = 0;
+  //double leadingPaperFeed = 0;
+  //double trailingPaperFeed = 0;
 
-  Future<void> _loadPaperFeedValues() async {
-    final prefs = await SharedPreferences.getInstance();
-    final leading = prefs.getDouble('saved_leading_paper_feed');
-    final trailing = prefs.getDouble('saved_trailing_paper_feed');
+  // Future<void> getOptions() async {
+  //   AppPreferences.init();
+  //   if (kDebugMode) {
+  //     print(" is58mm: ************** : ${AppPreferences.is58mm} ");
+  //   }
+  // }
 
+  Future<void> getOptions() async {
+    await AppPreferences.init();
     if (!mounted) return;
+    setState(() {});
 
-    setState(() {
-      if (leading == null) {
-        prefs.setDouble('saved_leading_paper_feed', 0);
-        leadingPaperFeed = 0;
-      } else {
-        leadingPaperFeed = leading;
-      }
-
-      if (trailing == null) {
-        prefs.setDouble('saved_trailing_paper_feed', 0);
-        trailingPaperFeed = 0;
-      } else {
-        trailingPaperFeed = trailing;
-      }
-    });
-  }
-
-  Future<void> _setPaperFeedValues() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('saved_leading_paper_feed', leadingPaperFeed);
-    await prefs.setDouble('saved_trailing_paper_feed', trailingPaperFeed);
-  }
-
-  Future<void> getRollWidthOption() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedOption = prefs.getString('saved_printer_option');
-
-    if (!mounted) return;
-
-    setState(() {
-      if (savedOption == null) {
-        currentOptionIs58mm = true;
-        prefs.setString('saved_printer_option', "58mm");
-      } else {
-        currentOptionIs58mm = savedOption == "58mm";
-      }
-    });
-  }
-
-  Future<void> setOption() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('saved_printer_option');
-
-    if (currentOptionIs58mm) {
-      await prefs.setString('saved_printer_option', "58mm");
-    } else {
-      await prefs.setString('saved_printer_option', "80mm");
+    if (kDebugMode) {
+      print(" is58mm: ************** : ${AppPreferences.is58mm} ");
+      print(" leading: ************** : ${AppPreferences.leadingFeed} ");
+      print(" trailing: ************** : ${AppPreferences.trailingFeed} ");
     }
   }
+
+  // Future<void> _loadPaperFeedValues() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   final leading = prefs.getDouble('saved_leading_paper_feed');
+  //   final trailing = prefs.getDouble('saved_trailing_paper_feed');
+  //
+  //   if (!mounted) return;
+  //
+  //   setState(() {
+  //     if (leading == null) {
+  //       prefs.setDouble('saved_leading_paper_feed', 0);
+  //       leadingPaperFeed = 0;
+  //     } else {
+  //       leadingPaperFeed = leading;
+  //     }
+  //
+  //     if (trailing == null) {
+  //       prefs.setDouble('saved_trailing_paper_feed', 0);
+  //       trailingPaperFeed = 0;
+  //     } else {
+  //       trailingPaperFeed = trailing;
+  //     }
+  //   });
+  // }
+
+  // Future<void> _setPaperFeedValues() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   await prefs.setDouble('saved_leading_paper_feed', leadingPaperFeed);
+  //   await prefs.setDouble('saved_trailing_paper_feed', trailingPaperFeed);
+  // }
+
+  // Future<void> getRollWidthOption() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   final savedOption = prefs.getString('saved_printer_option');
+  //
+  //   if (!mounted) return;
+  //
+  //   setState(() {
+  //     if (savedOption == null) {
+  //       currentOptionIs58mm = true;
+  //       prefs.setString('saved_printer_option', "58mm");
+  //     } else {
+  //       currentOptionIs58mm = savedOption == "58mm";
+  //     }
+  //   });
+  // }
+
+  // Future<void> setOption() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   await prefs.remove('saved_printer_option');
+  //
+  //   if (currentOptionIs58mm) {
+  //     await prefs.setString('saved_printer_option', "58mm");
+  //   } else {
+  //     await prefs.setString('saved_printer_option', "80mm");
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -109,7 +131,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   AnimatedAlign(
                     duration: const Duration(milliseconds: 180),
                     curve: Curves.easeInOut,
-                    alignment: currentOptionIs58mm
+                    alignment: AppPreferences.is58mm
                         ? Alignment.centerLeft
                         : Alignment.centerRight,
                     child: Container(
@@ -130,7 +152,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: () {
-                            if (!currentOptionIs58mm) {
+                            if (!AppPreferences.is58mm) {
                               ScaffoldMessenger.of(context).clearSnackBars();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
@@ -161,7 +183,9 @@ class _SettingsPageState extends State<SettingsPage> {
                             setState(() {
                               currentOptionIs58mm = true;
                             });
-                            setOption();
+                            AppPreferences.setPrinterOption(
+                              currentOptionIs58mm,
+                            );
                           },
                           child: Container(
                             alignment: Alignment.center,
@@ -171,7 +195,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: 1,
-                                color: currentOptionIs58mm
+                                color: AppPreferences.is58mm
                                     ? Colors.white
                                     : Colors.black,
                               ),
@@ -185,7 +209,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: () {
-                            if (currentOptionIs58mm) {
+                            if (AppPreferences.is58mm) {
                               ScaffoldMessenger.of(context).clearSnackBars();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
@@ -217,7 +241,9 @@ class _SettingsPageState extends State<SettingsPage> {
                             setState(() {
                               currentOptionIs58mm = false;
                             });
-                            setOption();
+                            AppPreferences.setPrinterOption(
+                              currentOptionIs58mm,
+                            );
                           },
                           child: Container(
                             alignment: Alignment.center,
@@ -227,7 +253,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: 1,
-                                color: currentOptionIs58mm
+                                color: AppPreferences.is58mm
                                     ? Colors.black
                                     : Colors.white,
                               ),
@@ -290,14 +316,14 @@ class _SettingsPageState extends State<SettingsPage> {
                           min: 0,
                           max: 5,
                           divisions: 5,
-                          value: leadingPaperFeed,
+                          value: AppPreferences.leadingFeed,
                           onChanged: (value) {
                             setState(() {
-                              leadingPaperFeed = value;
+                              AppPreferences.setLeadingFeed(value);
                             });
                           },
                           onChangeEnd: (value) {
-                            _setPaperFeedValues();
+                            AppPreferences.setLeadingFeed(value);
                           },
                         ),
                       ),
@@ -305,7 +331,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       const SizedBox(height: 3),
 
                       Text(
-                        "Leading Feed ${leadingPaperFeed.toInt()}",
+                        "Leading Feed ${AppPreferences.leadingFeed.toInt()}",
                         style: GoogleFonts.spaceMono(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
@@ -370,14 +396,14 @@ class _SettingsPageState extends State<SettingsPage> {
                           min: 0,
                           max: 5,
                           divisions: 5,
-                          value: trailingPaperFeed,
+                          value: AppPreferences.trailingFeed,
                           onChanged: (value) {
                             setState(() {
-                              trailingPaperFeed = value;
+                              AppPreferences.setTrailingFeed(value);
                             });
                           },
                           onChangeEnd: (value) {
-                            _setPaperFeedValues();
+                            AppPreferences.setTrailingFeed(value);
                           },
                         ),
                       ),
@@ -385,7 +411,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       const SizedBox(height: 3),
 
                       Text(
-                        "Trailing Feed ${trailingPaperFeed.toInt()}",
+                        "Trailing Feed ${AppPreferences.trailingFeed.toInt()}",
                         style: GoogleFonts.spaceMono(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,

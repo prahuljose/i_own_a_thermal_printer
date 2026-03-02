@@ -5,6 +5,7 @@ import 'package:i_own_a_thermal_printer/pages/connect_printer.dart';
 import 'package:i_own_a_thermal_printer/pages/home_page.dart';
 import 'package:i_own_a_thermal_printer/pages/qr.dart';
 import 'package:i_own_a_thermal_printer/pages/settings_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum AppView {
   home,
@@ -27,6 +28,7 @@ class DrawerPage extends StatefulWidget {
 
 class _DrawerPageState extends State<DrawerPage> {
   AppView currentView = AppView.home;
+
 
   Widget _getBody() {
     switch (currentView) {

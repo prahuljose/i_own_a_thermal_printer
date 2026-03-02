@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../widgets/app_preferences.dart';
+
 class QrPage extends StatefulWidget {
   const QrPage({super.key});
 
@@ -86,11 +88,15 @@ class _QrPageState extends State<QrPage> {
             // Simple ESC/POS print
 
             final profile = await CapabilityProfile.load();
-            final generator = Generator(PaperSize.mm58, profile);
+            final paperSize = AppPreferences.is58mm ? PaperSize.mm58 : PaperSize.mm80;
+
+            final generator = Generator(paperSize, profile);
 
             List<int> bytes = [];
             bytes += generator.reset();
             //bytes += generator.text("Device Name:");
+
+            bytes += generator.feed(AppPreferences.leadingFeed.toInt());
 
             bytes += generator.qrcode(
               qrData,
@@ -110,6 +116,8 @@ class _QrPageState extends State<QrPage> {
                 ),
               );
             }
+
+            bytes += generator.feed(AppPreferences.trailingFeed.toInt());
 
             bytes += generator.cut();
 
