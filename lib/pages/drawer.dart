@@ -7,6 +7,8 @@ import 'package:i_own_a_thermal_printer/pages/qr.dart';
 import 'package:i_own_a_thermal_printer/pages/settings_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'label_maker.dart';
+
 enum AppView {
   home,
   connectPrinter,
@@ -37,19 +39,19 @@ class _DrawerPageState extends State<DrawerPage> {
       case AppView.receiptBuilder:
         return const Center(child: Text("Receipt Builder"));
       case AppView.labelMaker:
-        return const Center(child: Text("Label Maker"));
+        return const Center(child: LabelMaker());
       case AppView.funMode:
-        return const Center(child: HomePage());
+        return const Center(child: Text("Fun Mode"));
       case AppView.home:
         return const Center(child: HomePage());
       case AppView.settings:
         return const Center(child: SettingsPage());
       case AppView.todo:
-        return const Center(child: HomePage());
+        return const Center(child: Text("ToDo"));
       case AppView.qr:
         return const Center(child: QrPage());
       case AppView.love:
-        return const Center(child: SettingsPage());
+        return const Center(child: Text("Show some love <3"));
     }
   }
 
