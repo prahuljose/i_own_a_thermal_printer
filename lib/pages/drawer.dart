@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:i_own_a_thermal_printer/pages/connect_printer.dart';
 import 'package:i_own_a_thermal_printer/pages/home_page.dart';
 import 'package:i_own_a_thermal_printer/pages/qr.dart';
+import 'package:i_own_a_thermal_printer/pages/receipt.dart';
 import 'package:i_own_a_thermal_printer/pages/settings_page.dart';
 import 'package:i_own_a_thermal_printer/pages/todo.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,7 +39,7 @@ class _DrawerPageState extends State<DrawerPage> {
       case AppView.connectPrinter:
         return const Center(child: ConnectPrinter());
       case AppView.receiptBuilder:
-        return const Center(child: Text("Receipt Builder"));
+        return const Center(child: Receipt());
       case AppView.labelMaker:
         return const Center(child: LabelMaker());
       case AppView.funMode:
