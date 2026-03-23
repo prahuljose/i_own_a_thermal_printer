@@ -5,6 +5,7 @@ import 'package:i_own_a_thermal_printer/pages/connect_printer.dart';
 import 'package:i_own_a_thermal_printer/pages/home_page.dart';
 import 'package:i_own_a_thermal_printer/pages/qr.dart';
 import 'package:i_own_a_thermal_printer/pages/settings_page.dart';
+import 'package:i_own_a_thermal_printer/pages/todo.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'label_maker.dart';
@@ -47,7 +48,7 @@ class _DrawerPageState extends State<DrawerPage> {
       case AppView.settings:
         return const Center(child: SettingsPage());
       case AppView.todo:
-        return const Center(child: Text("ToDo"));
+        return const Center(child: Todo());
       case AppView.qr:
         return const Center(child: QrPage());
       case AppView.love:
