@@ -1,3 +1,13 @@
+import java.util.Properties
+import java.io.FileInputStream
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -6,6 +16,27 @@ plugins {
 }
 
 android {
+
+    signingConfigs {
+        create("release") {
+            val keyAlias = keystoreProperties["keyAlias"] as String?
+            val keyPassword = keystoreProperties["keyPassword"] as String?
+            val storeFile = keystoreProperties["storeFile"] as String?
+            val storePassword = keystoreProperties["storePassword"] as String?
+
+            if (keyAlias != null &&
+                keyPassword != null &&
+                storeFile != null &&
+                storePassword != null
+            ) {
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+                this.storeFile = file(storeFile)
+                this.storePassword = storePassword
+            }
+        }
+    }
+
     namespace = "com.i_own_a_thermal_printer.app.i_own_a_thermal_printer"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
@@ -31,10 +62,10 @@ android {
     }
 
     buildTypes {
-        release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
         }
     }
 }
