@@ -49,6 +49,16 @@ dependencies:
   path_provider: ^2.1.2
   shared_preferences: ^2.2.2
 
+  # Database for history & templates
+  sqflite: ^2.3.0
+  path: ^1.9.0
+
+  # Image picking
+  image_picker: ^1.1.2
+
+  # Haptic feedback (built into flutter/services — no extra package needed)
+
+
 
   # UI goodies
   google_fonts: ^6.1.0

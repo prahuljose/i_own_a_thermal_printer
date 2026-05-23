@@ -1,8 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:i_own_a_thermal_printer/widgets/app_preferences.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -13,421 +11,340 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   @override
-void initState() {
+  void initState() {
     super.initState();
-    getOptions();
-    // getRollWidthOption();
-    //_loadPaperFeedValues();
+    _load();
   }
 
-  bool currentOptionIs58mm = true;
-  //double leadingPaperFeed = 0;
-  //double trailingPaperFeed = 0;
-
-  // Future<void> getOptions() async {
-  //   AppPreferences.init();
-  //   if (kDebugMode) {
-  //     print(" is58mm: ************** : ${AppPreferences.is58mm} ");
-  //   }
-  // }
-
-  Future<void> getOptions() async {
+  Future<void> _load() async {
     await AppPreferences.init();
-    if (!mounted) return;
-    setState(() {});
-
-    if (kDebugMode) {
-      print(" is58mm: ************** : ${AppPreferences.is58mm} ");
-      print(" leading: ************** : ${AppPreferences.leadingFeed} ");
-      print(" trailing: ************** : ${AppPreferences.trailingFeed} ");
-    }
+    if (mounted) setState(() {});
   }
-
-  // Future<void> _loadPaperFeedValues() async {
-  //   final prefs = await SharedPreferences.getInstance();
-  //   final leading = prefs.getDouble('saved_leading_paper_feed');
-  //   final trailing = prefs.getDouble('saved_trailing_paper_feed');
-  //
-  //   if (!mounted) return;
-  //
-  //   setState(() {
-  //     if (leading == null) {
-  //       prefs.setDouble('saved_leading_paper_feed', 0);
-  //       leadingPaperFeed = 0;
-  //     } else {
-  //       leadingPaperFeed = leading;
-  //     }
-  //
-  //     if (trailing == null) {
-  //       prefs.setDouble('saved_trailing_paper_feed', 0);
-  //       trailingPaperFeed = 0;
-  //     } else {
-  //       trailingPaperFeed = trailing;
-  //     }
-  //   });
-  // }
-
-  // Future<void> _setPaperFeedValues() async {
-  //   final prefs = await SharedPreferences.getInstance();
-  //   await prefs.setDouble('saved_leading_paper_feed', leadingPaperFeed);
-  //   await prefs.setDouble('saved_trailing_paper_feed', trailingPaperFeed);
-  // }
-
-  // Future<void> getRollWidthOption() async {
-  //   final prefs = await SharedPreferences.getInstance();
-  //   final savedOption = prefs.getString('saved_printer_option');
-  //
-  //   if (!mounted) return;
-  //
-  //   setState(() {
-  //     if (savedOption == null) {
-  //       currentOptionIs58mm = true;
-  //       prefs.setString('saved_printer_option', "58mm");
-  //     } else {
-  //       currentOptionIs58mm = savedOption == "58mm";
-  //     }
-  //   });
-  // }
-
-  // Future<void> setOption() async {
-  //   final prefs = await SharedPreferences.getInstance();
-  //   await prefs.remove('saved_printer_option');
-  //
-  //   if (currentOptionIs58mm) {
-  //     await prefs.setString('saved_printer_option', "58mm");
-  //   } else {
-  //     await prefs.setString('saved_printer_option', "80mm");
-  //   }
-  // }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Padding(
-        padding: EdgeInsetsGeometry.symmetric(horizontal: 32),
-        child: ListView(
-          children: [
-            const Divider(color: Colors.black, thickness: 1.5, height: 50),
-            Text(
-              "Roll Width:",
-              style: GoogleFonts.spaceMono(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.1,
-                color: Colors.black,
-              ),
-            ),
-            SizedBox(height: 5),
+      backgroundColor: const Color(0xFFF8F8F8),
+      body: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        children: [
+          _sectionLabel("PAPER ROLL", Icons.straighten_outlined),
+          const SizedBox(height: 10),
+          _paperWidthCard(),
+          const SizedBox(height: 28),
+          _sectionLabel("FEED BUFFERS", Icons.space_bar_outlined),
+          const SizedBox(height: 10),
+          _feedCard(
+            label: "Leading Feed",
+            description: "Blank lines printed before content.",
+            value: AppPreferences.leadingFeed,
+            onChanged: (v) {
+              AppPreferences.setLeadingFeed(v);
+              setState(() {});
+            },
+          ),
+          const SizedBox(height: 12),
+          _feedCard(
+            label: "Trailing Feed",
+            description: "Blank lines printed after content.",
+            value: AppPreferences.trailingFeed,
+            onChanged: (v) {
+              AppPreferences.setTrailingFeed(v);
+              setState(() {});
+            },
+          ),
+          const SizedBox(height: 28),
+          _aboutCard(),
+        ],
+      ),
+    );
+  }
 
-            Container(
-              height: 48,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.black, width: 1.5),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Stack(
-                children: [
-                  // Sliding black indicator
-                  AnimatedAlign(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeInOut,
-                    alignment: AppPreferences.is58mm
-                        ? Alignment.centerLeft
-                        : Alignment.centerRight,
+  Widget _sectionLabel(String text, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: Colors.black45),
+        const SizedBox(width: 6),
+        Text(
+          text,
+          style: GoogleFonts.spaceMono(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.5,
+            color: Colors.black45,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _paperWidthCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.black12, width: 1),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Roll Width",
+            style: GoogleFonts.spaceMono(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.black,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Select the paper roll width for your printer.",
+            style: GoogleFonts.spaceMono(
+              fontSize: 10,
+              color: Colors.black45,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            height: 44,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.black, width: 1.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Stack(
+              children: [
+                AnimatedAlign(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeInOut,
+                  alignment: AppPreferences.is58mm
+                      ? Alignment.centerLeft
+                      : Alignment.centerRight,
+                  child: FractionallySizedBox(
+                    widthFactor: 0.5,
                     child: Container(
-                      width: MediaQuery.of(context).size.width / 2 - 32 - 1.5,
-                      // subtract padding & divider thickness if needed
                       decoration: BoxDecoration(
                         color: Colors.black,
                         borderRadius: BorderRadius.circular(6),
                       ),
                     ),
                   ),
-
-                  // Tap layer
-                  Row(
-                    children: [
-                      // 58MM
-                      Expanded(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {
-                            if (!AppPreferences.is58mm) {
-                              ScaffoldMessenger.of(context).clearSnackBars();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  backgroundColor: Colors.black,
-                                  elevation: 0,
-                                  behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(
-                                    side: const BorderSide(
-                                      color: Colors.white12,
-                                      width: 1.5,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  content: Text(
-                                    "58mm roll width set",
-                                    textAlign: TextAlign.center,
-                                    style: GoogleFonts.spaceMono(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.8,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  duration: Duration(seconds: 1),
-                                ),
-                              );
-                            }
-                            setState(() {
-                              currentOptionIs58mm = true;
-                            });
-                            AppPreferences.setPrinterOption(
-                              currentOptionIs58mm,
-                            );
-                          },
-                          child: Container(
-                            alignment: Alignment.center,
-                            child: Text(
-                              "58MM",
-                              style: GoogleFonts.spaceMono(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1,
-                                color: AppPreferences.is58mm
-                                    ? Colors.white
-                                    : Colors.black,
-                              ),
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          if (AppPreferences.is58mm) return;
+                          AppPreferences.setPrinterOption(true);
+                          setState(() {});
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            _snackBar("58mm roll width set"),
+                          );
+                        },
+                        child: Center(
+                          child: Text(
+                            "58MM",
+                            style: GoogleFonts.spaceMono(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
+                              color: AppPreferences.is58mm
+                                  ? Colors.white
+                                  : Colors.black,
                             ),
                           ),
                         ),
                       ),
-
-                      // 80MM
-                      Expanded(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {
-                            if (AppPreferences.is58mm) {
-                              ScaffoldMessenger.of(context).clearSnackBars();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  backgroundColor: Colors.black,
-                                  elevation: 0,
-                                  behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(
-                                    side: const BorderSide(
-                                      color: Colors.white12,
-                                      width: 1.5,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  content: Text(
-                                    "80mm roll width set",
-                                    textAlign: TextAlign.center,
-                                    style: GoogleFonts.spaceMono(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.8,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  duration: Duration(seconds: 1),
-                                ),
-                              );
-                            }
-
-                            setState(() {
-                              currentOptionIs58mm = false;
-                            });
-                            AppPreferences.setPrinterOption(
-                              currentOptionIs58mm,
-                            );
-                          },
-                          child: Container(
-                            alignment: Alignment.center,
-                            child: Text(
-                              "80MM",
-                              style: GoogleFonts.spaceMono(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1,
-                                color: AppPreferences.is58mm
-                                    ? Colors.black
-                                    : Colors.white,
-                              ),
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          if (!AppPreferences.is58mm) return;
+                          AppPreferences.setPrinterOption(false);
+                          setState(() {});
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            _snackBar("80mm roll width set"),
+                          );
+                        },
+                        child: Center(
+                          child: Text(
+                            "80MM",
+                            style: GoogleFonts.spaceMono(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
+                              color: AppPreferences.is58mm
+                                  ? Colors.black
+                                  : Colors.white,
                             ),
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const Divider(color: Colors.black, thickness: 1.5, height: 50),
-            Text(
-              "Leading Feed Buffer:",
-              style: GoogleFonts.spaceMono(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.1,
-                color: Colors.black,
-              ),
-            ),
-            Text(
-              "How much extra blank paper needs to be printed first.",
-              style: GoogleFonts.spaceMono(
-                fontSize: 9,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.1,
-                color: Colors.black,
-              ),
-            ),
-            SizedBox(height: 5),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                //const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.black, width: 1.5),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    children: [
-                      SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          activeTrackColor: Colors.black,
-                          inactiveTrackColor: Colors.black26,
-                          thumbColor: Colors.black,
-                          overlayColor: Colors.black12,
-                          trackHeight: 2,
-                          thumbShape: const RoundSliderThumbShape(
-                            enabledThumbRadius: 8,
-                          ),
-                        ),
-                        child: Slider(
-                          min: 0,
-                          max: 5,
-                          divisions: 5,
-                          value: AppPreferences.leadingFeed,
-                          onChanged: (value) {
-                            setState(() {
-                              AppPreferences.setLeadingFeed(value);
-                            });
-                          },
-                          onChangeEnd: (value) {
-                            AppPreferences.setLeadingFeed(value);
-                          },
-                        ),
-                      ),
-
-                      const SizedBox(height: 3),
-
-                      Text(
-                        "Leading Feed ${AppPreferences.leadingFeed.toInt()}",
-                        style: GoogleFonts.spaceMono(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                          color: Colors.black,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ],
             ),
-            //SizedBox(height: 20),
-            const Divider(color: Colors.black, thickness: 1.5, height: 50),
-            Text(
-              "Trailing Feed Buffer:",
-              style: GoogleFonts.spaceMono(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.1,
-                color: Colors.black,
-              ),
-            ),
-            Text(
-              "How much extra blank paper needs to be printed at the end.",
-              style: GoogleFonts.spaceMono(
-                fontSize: 9,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.1,
-                color: Colors.black,
-              ),
-            ),
-            SizedBox(height: 5),
-
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                //const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.black, width: 1.5),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    children: [
-                      SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          activeTrackColor: Colors.black,
-                          inactiveTrackColor: Colors.black26,
-                          thumbColor: Colors.black,
-                          overlayColor: Colors.black12,
-                          trackHeight: 2,
-                          thumbShape: const RoundSliderThumbShape(
-                            enabledThumbRadius: 8,
-                          ),
-                        ),
-                        child: Slider(
-                          min: 0,
-                          max: 5,
-                          divisions: 5,
-                          value: AppPreferences.trailingFeed,
-                          onChanged: (value) {
-                            setState(() {
-                              AppPreferences.setTrailingFeed(value);
-                            });
-                          },
-                          onChangeEnd: (value) {
-                            AppPreferences.setTrailingFeed(value);
-                          },
-                        ),
-                      ),
-
-                      const SizedBox(height: 3),
-
-                      Text(
-                        "Trailing Feed ${AppPreferences.trailingFeed.toInt()}",
-                        style: GoogleFonts.spaceMono(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                          color: Colors.black,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const Divider(color: Colors.black, thickness: 1.5, height: 50),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
+
+  Widget _feedCard({
+    required String label,
+    required String description,
+    required double value,
+    required ValueChanged<double> onChanged,
+  }) {
+    final intVal = value.toInt();
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.black12, width: 1),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.spaceMono(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: intVal == 0 ? Colors.black12 : Colors.black,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  "$intVal",
+                  style: GoogleFonts.spaceMono(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: intVal == 0 ? Colors.black45 : Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            description,
+            style: GoogleFonts.spaceMono(
+              fontSize: 10,
+              color: Colors.black45,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: Colors.black,
+              inactiveTrackColor: Colors.black12,
+              thumbColor: Colors.black,
+              overlayColor: Colors.black.withValues(alpha: 0.08),
+              trackHeight: 2,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+            ),
+            child: Slider(
+              min: 0,
+              max: 5,
+              divisions: 5,
+              value: value,
+              onChanged: onChanged,
+              onChangeEnd: onChanged,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: List.generate(
+                6,
+                (i) => Text(
+                  "$i",
+                  style: GoogleFonts.spaceMono(
+                    fontSize: 9,
+                    color: intVal == i ? Colors.black : Colors.black26,
+                    fontWeight: intVal == i
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _aboutCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.black12, width: 1),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.print_rounded,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "I Own a Thermal Printer",
+                style: GoogleFonts.spaceMono(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
+              Text(
+                "v1.0.0 · That's hot 🥵",
+                style: GoogleFonts.spaceMono(
+                  fontSize: 10,
+                  color: Colors.black45,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  SnackBar _snackBar(String message) => SnackBar(
+        content: Text(message, textAlign: TextAlign.center),
+        duration: const Duration(seconds: 1),
+      );
 }

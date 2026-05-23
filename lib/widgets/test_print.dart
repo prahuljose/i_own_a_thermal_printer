@@ -1,6 +1,6 @@
 import 'package:esc_pos_utils/esc_pos_utils.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_preferences.dart';
 
@@ -25,7 +25,7 @@ Future<void> testPrint(BluetoothDevice device) async {
   }
 
   if (writeChar == null) {
-    print("No writable characteristic found");
+    debugPrint("No writable characteristic found");
     return;
   }
 
@@ -50,7 +50,6 @@ Future<void> testPrint(BluetoothDevice device) async {
   final generator = Generator(paperSize, profile);
 
   final now = DateTime.now();
-  final connectionState = device.connectionState.toString();
 
   List<int> bytes = [];
 

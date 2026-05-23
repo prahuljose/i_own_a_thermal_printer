@@ -1,5 +1,3 @@
-
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -50,6 +48,8 @@ class _ScanningIndicatorState extends State<ScanningIndicator>
 }
 
 class BlinkingText extends StatefulWidget {
+  const BlinkingText({super.key});
+
   @override
   State<BlinkingText> createState() => BlinkingTextState();
 }

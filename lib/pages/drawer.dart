@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:i_own_a_thermal_printer/pages/connect_printer.dart';
+import 'package:i_own_a_thermal_printer/pages/history_page.dart';
 import 'package:i_own_a_thermal_printer/pages/home_page.dart';
 import 'package:i_own_a_thermal_printer/pages/qr.dart';
 import 'package:i_own_a_thermal_printer/pages/receipt.dart';
 import 'package:i_own_a_thermal_printer/pages/settings_page.dart';
 import 'package:i_own_a_thermal_printer/pages/todo.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:i_own_a_thermal_printer/services/printer_service.dart';
 
+import 'fun_mode.dart';
 import 'label_maker.dart';
 
 enum AppView {
@@ -20,7 +22,8 @@ enum AppView {
   settings,
   todo,
   qr,
-  love
+  history,
+  love,
 }
 
 class DrawerPage extends StatefulWidget {
@@ -33,25 +36,34 @@ class DrawerPage extends StatefulWidget {
 class _DrawerPageState extends State<DrawerPage> {
   AppView currentView = AppView.home;
 
+  void _navigateTo(AppView view) {
+    setState(() => currentView = view);
+  }
 
   Widget _getBody() {
+    void goToConnect() {
+      _navigateTo(AppView.connectPrinter);
+    }
+
     switch (currentView) {
       case AppView.connectPrinter:
-        return const Center(child: ConnectPrinter());
+        return ConnectPrinter();
       case AppView.receiptBuilder:
-        return const Center(child: Receipt());
+        return Receipt(onConnectPressed: goToConnect);
       case AppView.labelMaker:
-        return const Center(child: LabelMaker());
+        return LabelMaker(onConnectPressed: goToConnect);
       case AppView.funMode:
-        return const Center(child: Text("Fun Mode"));
+        return FunMode(onConnectPressed: goToConnect);
       case AppView.home:
-        return const Center(child: HomePage());
+        return const HomePage();
       case AppView.settings:
-        return const Center(child: SettingsPage());
+        return const SettingsPage();
       case AppView.todo:
-        return const Center(child: Todo());
+        return Todo(onConnectPressed: goToConnect);
       case AppView.qr:
-        return const Center(child: QrPage());
+        return QrPage(onConnectPressed: goToConnect);
+      case AppView.history:
+        return const HistoryPage();
       case AppView.love:
         return const Center(child: Text("Show some love <3"));
     }
@@ -75,21 +87,48 @@ class _DrawerPageState extends State<DrawerPage> {
         return "To-Do";
       case AppView.qr:
         return "QR Printer";
+      case AppView.history:
+        return "Print History";
       case AppView.love:
         return "Awww <3";
     }
+  }
+
+  Widget _drawerTile({
+    required AppView view,
+    required String label,
+    required IconData icon,
+    Widget? trailing,
+  }) {
+    final selected = currentView == view;
+    return ListTile(
+      selected: selected,
+      selectedTileColor: Colors.black,
+      selectedColor: Colors.white,
+      leading: Icon(icon),
+      title: Text(
+        label,
+        style: GoogleFonts.spaceMono(
+          fontSize: 15,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      trailing: trailing,
+      onTap: () {
+        setState(() => currentView = view);
+        Navigator.pop(context);
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-
         systemOverlayStyle: const SystemUiOverlayStyle(
           statusBarColor: Colors.black,
           statusBarIconBrightness: Brightness.light,
         ),
-
         backgroundColor: Colors.black,
         title: Text(
           _getTitle(),
@@ -106,187 +145,128 @@ class _DrawerPageState extends State<DrawerPage> {
           children: [
             DrawerHeader(
               decoration: const BoxDecoration(color: Colors.black),
-              child: Align(
-                alignment: Alignment.bottomLeft,
-                child: Text(
-                  "Thermal Printer- That's hot 🥵",
-                  style: GoogleFonts.spaceMono(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    "Thermal Printer",
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  ValueListenableBuilder<dynamic>(
+                    valueListenable: PrinterService.deviceNotifier,
+                    builder: (context, device, child) {
+                      final isConnected = device != null;
+                      return Row(
+                        children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: isConnected
+                                  ? const Color(0xFF00E676)
+                                  : Colors.white24,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            isConnected
+                                ? device.platformName.isNotEmpty
+                                    ? device.platformName
+                                    : "Connected"
+                                : "No printer connected",
+                            style: GoogleFonts.spaceMono(
+                              fontSize: 11,
+                              color: isConnected
+                                  ? Colors.white70
+                                  : Colors.white38,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
               ),
             ),
-            ListTile(
-              selected: currentView == AppView.home,
-              selectedTileColor: Colors.black,
-              selectedColor: Colors.white,
-              title: Text(
-                "Home",
-                style: GoogleFonts.spaceMono(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  //color: Colors.black,
-                ),
-              ),
-              leading: const Icon(Icons.home),
-              onTap: () {
-                setState(() => currentView = AppView.home);
-                Navigator.pop(context);
-              },
+
+            _drawerTile(
+              view: AppView.home,
+              label: "Home",
+              icon: Icons.home,
             ),
             const Divider(),
-
-            ListTile(
-              selected: currentView == AppView.connectPrinter,
-              selectedTileColor: Colors.black,
-              selectedColor: Colors.white,
-              title: Text(
-                "Connect Printer",
-                style: GoogleFonts.spaceMono(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  //color: Colors.black,
-                ),
-              ),
-              leading: const Icon(Icons.bluetooth),
-              onTap: () {
-                setState(() => currentView = AppView.connectPrinter);
-                Navigator.pop(context);
+            ValueListenableBuilder<dynamic>(
+              valueListenable: PrinterService.deviceNotifier,
+              builder: (context, device, child) {
+                return _drawerTile(
+                  view: AppView.connectPrinter,
+                  label: "Connect Printer",
+                  icon: Icons.bluetooth,
+                  trailing: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: device != null
+                          ? const Color(0xFF00E676)
+                          : Colors.transparent,
+                      shape: BoxShape.circle,
+                      border: device != null
+                          ? null
+                          : Border.all(color: Colors.black26, width: 1),
+                    ),
+                  ),
+                );
               },
             ),
-
-            ListTile(
-              selected: currentView == AppView.receiptBuilder,
-              selectedTileColor: Colors.black,
-              selectedColor: Colors.white,
-              leading: const Icon(Icons.receipt_long),
-              title: Text(
-                "Receipt Builder",
-                style: GoogleFonts.spaceMono(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  //color: Colors.black,
-                ),
-              ),
-              onTap: () {
-                setState(() => currentView = AppView.receiptBuilder);
-                Navigator.pop(context);
-              },
+            _drawerTile(
+              view: AppView.receiptBuilder,
+              label: "Receipt Builder",
+              icon: Icons.receipt_long,
             ),
-
-            ListTile(
-              selected: currentView == AppView.labelMaker,
-              selectedTileColor: Colors.black,
-              selectedColor: Colors.white,
-              leading: const Icon(Icons.label),
-              title: Text(
-                "Label Maker",
-                style: GoogleFonts.spaceMono(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  //color: Colors.black,
-                ),
-              ),
-              onTap: () {
-                setState(() => currentView = AppView.labelMaker);
-                Navigator.pop(context);
-              },
+            _drawerTile(
+              view: AppView.labelMaker,
+              label: "Label Maker",
+              icon: Icons.label,
             ),
-            ListTile(
-
-              selected: currentView == AppView.todo,
-              selectedTileColor: Colors.black,
-              selectedColor: Colors.white,
-              leading: const Icon(Icons.download_done_outlined),
-              title: Text(
-                "To-Do",
-                style: GoogleFonts.spaceMono(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  //color: Colors.black,
-                ),
-              ),
-              onTap: () {
-                setState(() => currentView = AppView.todo);
-                Navigator.pop(context);
-              },
+            _drawerTile(
+              view: AppView.todo,
+              label: "To-Do",
+              icon: Icons.checklist,
             ),
-            ListTile(
-
-              selected: currentView == AppView.qr,
-              selectedTileColor: Colors.black,
-              selectedColor: Colors.white,
-              leading: const Icon(Icons.qr_code_rounded),
-              title: Text(
-                "QR Printer",
-                style: GoogleFonts.spaceMono(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  //color: Colors.black,
-                ),
-              ),
-              onTap: () {
-                setState(() => currentView = AppView.qr);
-                Navigator.pop(context);
-              },
+            _drawerTile(
+              view: AppView.qr,
+              label: "QR Printer",
+              icon: Icons.qr_code_rounded,
             ),
-            ListTile(
-
-              selected: currentView == AppView.funMode,
-              selectedTileColor: Colors.black,
-              selectedColor: Colors.white,
-              leading: const Icon(Icons.auto_awesome),
-              title: Text(
-                "Fun Mode",
-                style: GoogleFonts.spaceMono(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  //color: Colors.black,
-                ),
-              ),
-              onTap: () {
-                setState(() => currentView = AppView.funMode);
-                Navigator.pop(context);
-              },
+            _drawerTile(
+              view: AppView.funMode,
+              label: "Fun Mode",
+              icon: Icons.auto_awesome,
             ),
             const Divider(),
-            ListTile(
-              selected: currentView == AppView.settings,
-              selectedTileColor: Colors.black,
-              selectedColor: Colors.white,
-              leading: const Icon(Icons.settings),
-              title: Text(
-                "Settings",
-                style: GoogleFonts.spaceMono(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  //color: Colors.black,
-                ),
-              ),
-              onTap: () {
-                setState(() => currentView = AppView.settings);
-                Navigator.pop(context);
-              },
+            _drawerTile(
+              view: AppView.history,
+              label: "Print History",
+              icon: Icons.history,
             ),
-            ListTile(
-              selected: currentView == AppView.love,
-              selectedTileColor: Colors.black,
-              selectedColor: Colors.white,
-              leading: const Icon(Icons.rate_review),
-              title: Text(
-                "Show some 🖤",
-                style: GoogleFonts.spaceMono(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  //color: Colors.black,
-                ),
-              ),
-              onTap: () {
-                setState(() => currentView = AppView.love);
-                Navigator.pop(context);
-              },
+            _drawerTile(
+              view: AppView.settings,
+              label: "Settings",
+              icon: Icons.settings,
+            ),
+            _drawerTile(
+              view: AppView.love,
+              label: "Show some 🖤",
+              icon: Icons.rate_review,
             ),
           ],
         ),

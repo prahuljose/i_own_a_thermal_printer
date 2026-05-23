@@ -1,16 +1,15 @@
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:i_own_a_thermal_printer/widgets/scanning_printer_animation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:permission_handler/permission_handler.dart';
+
+import '../services/printer_service.dart';
 import '../widgets/app_preferences.dart';
 import '../widgets/test_print.dart';
 
 class ConnectPrinter extends StatefulWidget {
-  // methods...
   const ConnectPrinter({super.key});
 
   @override
@@ -18,34 +17,30 @@ class ConnectPrinter extends StatefulWidget {
 }
 
 class _ConnectPrinterState extends State<ConnectPrinter> {
-  List<BluetoothDevice> devices = [];
-  BluetoothDevice? connectedDevice;
-  bool isScanning = false;
-  bool isConnecting = false;
+  // Keyed by remoteId so we overwrite stale results with fresher RSSI.
+  final Map<String, ScanResult> _results = {};
+  bool _isScanning = false;
+  String? _connectingId; // remoteId of the device currently being connected
+  StreamSubscription<List<ScanResult>>? _scanSub;
 
   @override
   void initState() {
     super.initState();
-    getOptions();
     _init();
   }
 
-  Future<void> getOptions() async {
-    await AppPreferences.init();
-    if (!mounted) return;
-    setState(() {});
-
-    if (kDebugMode) {
-      print(" is58mm: ************** : ${AppPreferences.is58mm} ");
-      print(" leading: ************** : ${AppPreferences.leadingFeed} ");
-      print(" trailing: ************** : ${AppPreferences.trailingFeed} ");
-    }
+  @override
+  void dispose() {
+    _scanSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _init() async {
+    await AppPreferences.init();
     await _requestPermissions();
-    _autoReconnectPrinter();
-    await _startScan();
+    await PrinterService.autoReconnect();
+    if (mounted) setState(() {});
+    _startScan();
   }
 
   Future<void> _requestPermissions() async {
@@ -57,256 +52,541 @@ class _ConnectPrinterState extends State<ConnectPrinter> {
   }
 
   Future<void> _startScan() async {
-    devices.clear();
-    setState(() => isScanning = true);
+    _results.clear();
+    _scanSub?.cancel();
+    setState(() => _isScanning = true);
 
-    await FlutterBluePlus.startScan(timeout: const Duration(seconds: 4));
+    await FlutterBluePlus.startScan(timeout: const Duration(seconds: 6));
 
-    FlutterBluePlus.scanResults.listen((results) {
-      for (ScanResult r in results) {
-        if (!devices.contains(r.device)) {
-          devices.add(r.device);
+    _scanSub = FlutterBluePlus.scanResults.listen((results) {
+      if (!mounted) return;
+      setState(() {
+        for (final r in results) {
+          _results[r.device.remoteId.str] = r;
         }
-      }
-      setState(() {});
+      });
     });
 
-    await Future.delayed(const Duration(seconds: 4));
-    setState(() => isScanning = false);
+    await Future.delayed(const Duration(seconds: 6));
+    if (mounted) setState(() => _isScanning = false);
+  }
+
+  Future<void> _stopScan() async {
+    await FlutterBluePlus.stopScan();
+    _scanSub?.cancel();
+    if (mounted) setState(() => _isScanning = false);
   }
 
   Future<void> _connect(BluetoothDevice device) async {
-    if (isConnecting) return;
-
-    setState(() => isConnecting = true);
+    if (_connectingId != null) return;
+    setState(() => _connectingId = device.remoteId.str);
 
     try {
-      // 🔁 If tapping the already connected device → disconnect
-      if (connectedDevice?.remoteId == device.remoteId) {
+      final current = PrinterService.connectedDevice;
+
+      if (current?.remoteId == device.remoteId) {
         await device.disconnect();
-        setState(() => connectedDevice = null);
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.remove('saved_printer_id');
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Printer disconnected", textAlign: TextAlign.center,),
-            duration: Duration(seconds: 1),
-          ),
-        );
+        PrinterService.setDevice(null);
+        await PrinterService.persistDeviceId(null);
+        _showSnack("Printer disconnected");
       } else {
-        // 🔌 If another device is already connected → disconnect first
-        if (connectedDevice != null) {
-          await connectedDevice!.disconnect();
-        }
-
+        if (current != null) await current.disconnect();
         await device.connect();
-        setState(() => connectedDevice = device);
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('saved_printer_id', device.remoteId.str);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Printer connected successfully", textAlign: TextAlign.center,),
-            duration: Duration(seconds: 1),
-          ),
-        );
+        PrinterService.setDevice(device);
+        await PrinterService.requestMtu();
+        await PrinterService.persistDeviceId(device.remoteId.str);
+        _showSnack("Connected to ${device.platformName.isNotEmpty ? device.platformName : 'printer'}");
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Connection error: $e"),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      _showSnack("Connection failed: $e");
     }
 
-    setState(() => isConnecting = false);
+    if (mounted) setState(() => _connectingId = null);
   }
 
-  bool isCheckingConnection = true;
-
-  Future<void> _autoReconnectPrinter() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedId = prefs.getString('saved_printer_id');
-
-    if (savedId == null) {
-      setState(() => isCheckingConnection = false);
-      return;
-    }
-
-    try {
-      final bondedDevices = await FlutterBluePlus.bondedDevices;
-
-      final device = bondedDevices.firstWhere(
-            (d) => d.remoteId.str == savedId,
-      );
-
-      if (!device.isConnected) {
-        await device.connect(autoConnect: false);
-      }
-
-      connectedDevice = device;
-    } catch (e) {
-      connectedDevice = null;
-    }
-
-    setState(() => isCheckingConnection = false);
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, textAlign: TextAlign.center),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
+    return ValueListenableBuilder<dynamic>(
+      valueListenable: PrinterService.deviceNotifier,
+      builder: (context, connectedDevice, child) {
+        // Devices visible in scan, excluding the one already connected
+        final otherDevices = _results.values
+            .where((r) => r.device.remoteId != connectedDevice?.remoteId)
+            .toList()
+          ..sort((a, b) => b.rssi.compareTo(a.rssi));
 
-        ElevatedButton.icon(
-          onPressed: isScanning ? null : _startScan,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.black,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 16),
+
+            // ── Connected device card ─────────────────────────────────────
+            if (connectedDevice != null)
+              _ConnectedCard(
+                device: connectedDevice,
+                isConnecting: _connectingId != null,
+                onDisconnect: () => _connect(connectedDevice),
+                onTestPrint: () => testPrint(connectedDevice),
+              ),
+
+            if (connectedDevice != null) const SizedBox(height: 20),
+
+            // ── Scan row ─────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _ScanButton(
+                isScanning: _isScanning,
+                onTap: _isScanning ? _stopScan : _startScan,
+              ),
             ),
-          ),
-          icon: const Icon(Icons.bluetooth_searching),
-          label: Text(
-            isScanning ? "SCANNING..." : "SCAN FOR PRINTERS",
-            style: GoogleFonts.spaceMono(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
+
+            const SizedBox(height: 8),
+
+            // ── Device list ───────────────────────────────────────────────
+            Expanded(
+              child: otherDevices.isEmpty
+                  ? _EmptyState(isScanning: _isScanning)
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      itemCount: otherDevices.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final result = otherDevices[index];
+                        return _DeviceTile(
+                          result: result,
+                          connectingId: _connectingId,
+                          onTap: () => _connect(result.device),
+                        );
+                      },
+                    ),
             ),
-          ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ── Connected device card ──────────────────────────────────────────────────
+
+class _ConnectedCard extends StatelessWidget {
+  final BluetoothDevice device;
+  final bool isConnecting;
+  final VoidCallback onDisconnect;
+  final VoidCallback onTestPrint;
+
+  const _ConnectedCard({
+    required this.device,
+    required this.isConnecting,
+    required this.onDisconnect,
+    required this.onTestPrint,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final name = device.platformName.isNotEmpty
+        ? device.platformName.toUpperCase()
+        : 'UNKNOWN PRINTER';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(14),
         ),
-
-        // if (isScanning)
-        //   const SizedBox(height: 24),
-        if (isScanning) ScanningIndicator(),
-
-        const SizedBox(height: 10),
-
-        SizedBox(
-          height: (MediaQuery.of(context).size.height)*0.65,
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            itemCount: devices.length,
-            itemBuilder: (context, index) {
-              final device = devices[index];
-              final isConnected = connectedDevice?.remoteId == device.remoteId;
-
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: isConnected ? Colors.black : Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.black, width: 1.5),
-                ),
-                child: InkWell(
-                  splashColor: Colors.black.withOpacity(0.05),
-                  highlightColor: Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => _connect(device),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.device_hub_rounded,
-                          size: 22,
-                          color: isConnected ? Colors.white : Colors.black,
-                        ),
-                        const SizedBox(width: 14),
-
-                        // Device Info
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                device.platformName.isNotEmpty
-                                    ? device.platformName
-                                    : "UNKNOWN_DEVICE",
-                                style: GoogleFonts.spaceMono(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.2,
-                                  color: isConnected
-                                      ? Colors.white
-                                      : Colors.black,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                device.remoteId.toString(),
-                                style: GoogleFonts.spaceMono(
-                                  fontSize: 11,
-                                  letterSpacing: 0.8,
-                                  color: isConnected
-                                      ? Colors.white70
-                                      : Colors.black54,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        if (isConnected)
-                          const Icon(Icons.check_circle, color: Colors.white),
-                      ],
-                    ),
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF4ADE80),
+                    shape: BoxShape.circle,
                   ),
                 ),
-              );
-            },
+                const SizedBox(width: 8),
+                Text(
+                  "CONNECTED",
+                  style: GoogleFonts.spaceMono(
+                    fontSize: 9,
+                    letterSpacing: 1.8,
+                    color: const Color(0xFF4ADE80),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              name,
+              style: GoogleFonts.spaceMono(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.6,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              device.remoteId.str,
+              style: GoogleFonts.spaceMono(
+                fontSize: 10,
+                color: Colors.white38,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _CardButton(
+                    label: "TEST PRINT",
+                    icon: Icons.print_outlined,
+                    onTap: isConnecting ? null : onTestPrint,
+                    filled: false,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _CardButton(
+                    label: "DISCONNECT",
+                    icon: Icons.bluetooth_disabled_outlined,
+                    onTap: isConnecting ? null : onDisconnect,
+                    filled: true,
+                    destructive: true,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CardButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback? onTap;
+  final bool filled;
+  final bool destructive;
+
+  const _CardButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    required this.filled,
+    this.destructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = destructive ? const Color(0xFFFF6B6B) : Colors.white;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: filled ? color.withValues(alpha: 0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: onTap == null ? Colors.white12 : color.withValues(alpha: 0.4),
+            width: 1,
           ),
         ),
-        //const SizedBox(height: 5),
-
-        if (connectedDevice != null) ...[
-          const SizedBox(height: 12),
-
-          ElevatedButton.icon(
-            onPressed: isConnecting
-                ? null
-                : () async {
-              if (connectedDevice != null) {
-                await testPrint(connectedDevice!);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 14,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon,
+                size: 14,
+                color: onTap == null ? Colors.white24 : color),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.spaceMono(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+                color: onTap == null ? Colors.white24 : color,
               ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: const BorderSide(color: Colors.black, width: 1.5),
-              ),
-              elevation: 0,
             ),
-            icon: const Icon(Icons.print),
-            label: Text(
-              "TEST PRINT",
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Scan button ───────────────────────────────────────────────────────────
+
+class _ScanButton extends StatelessWidget {
+  final bool isScanning;
+  final VoidCallback onTap;
+
+  const _ScanButton({required this.isScanning, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: isScanning ? const Color(0xFFF0F0F0) : Colors.black,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (isScanning) ...[
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black54),
+                ),
+              ),
+            ] else
+              const Icon(Icons.bluetooth_searching,
+                  size: 16, color: Colors.white),
+            const SizedBox(width: 10),
+            Text(
+              isScanning ? "SCANNING...  TAP TO STOP" : "SCAN FOR PRINTERS",
               style: GoogleFonts.spaceMono(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
-                letterSpacing: 0.6,
+                letterSpacing: 1.2,
+                color: isScanning ? Colors.black54 : Colors.white,
               ),
             ),
-          ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-          const SizedBox(height: 16),
-        ],
-      ],
+// ── Device tile ───────────────────────────────────────────────────────────
+
+class _DeviceTile extends StatelessWidget {
+  final ScanResult result;
+  final String? connectingId;
+  final VoidCallback onTap;
+
+  const _DeviceTile({
+    required this.result,
+    required this.connectingId,
+    required this.onTap,
+  });
+
+  Color _rssiColor(int rssi) {
+    if (rssi >= -60) return const Color(0xFF4ADE80);
+    if (rssi >= -75) return const Color(0xFFFBBF24);
+    return const Color(0xFFFF6B6B);
+  }
+
+  String _rssiLabel(int rssi) {
+    if (rssi >= -60) return "STRONG";
+    if (rssi >= -75) return "FAIR";
+    return "WEAK";
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final device = result.device;
+    final thisId = device.remoteId.str;
+    final isThisConnecting = connectingId == thisId;
+    final anyConnecting = connectingId != null;
+
+    final name = device.platformName.isNotEmpty
+        ? device.platformName
+        : 'Unknown Device';
+    final rssiColor = _rssiColor(result.rssi);
+
+    return GestureDetector(
+      onTap: anyConnecting ? null : onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isThisConnecting ? Colors.black : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isThisConnecting ? Colors.black : Colors.black12,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            // Signal dot — becomes spinner while connecting
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: isThisConnecting
+                  ? CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(Colors.white54),
+                    )
+                  : Center(
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: anyConnecting ? Colors.black26 : rssiColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 14),
+
+            // Name + status
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                      color: isThisConnecting
+                          ? Colors.white
+                          : anyConnecting
+                              ? Colors.black38
+                              : Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    isThisConnecting ? "Connecting..." : device.remoteId.str,
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 10,
+                      color: isThisConnecting
+                          ? Colors.white38
+                          : Colors.black38,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Signal info — hidden while connecting
+            if (!isThisConnecting) ...[
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    _rssiLabel(result.rssi),
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: anyConnecting ? Colors.black26 : rssiColor,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  Text(
+                    "${result.rssi} dBm",
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 9,
+                      color: Colors.black26,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 12),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 12,
+                color: anyConnecting ? Colors.black12 : Colors.black26,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Empty state ────────────────────────────────────────────────────────────
+
+class _EmptyState extends StatelessWidget {
+  final bool isScanning;
+
+  const _EmptyState({required this.isScanning});
+
+  @override
+  Widget build(BuildContext context) {
+    if (isScanning) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 20),
+            Text(
+              "Looking for printers nearby...",
+              style: GoogleFonts.spaceMono(
+                fontSize: 12,
+                color: Colors.black38,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.bluetooth_disabled_outlined,
+                size: 40, color: Colors.black12),
+            const SizedBox(height: 16),
+            Text(
+              "No printers found",
+              style: GoogleFonts.spaceMono(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Colors.black45,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              "Make sure your printer is powered on and Bluetooth is enabled, then scan again.",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.spaceMono(
+                fontSize: 10,
+                color: Colors.black38,
+                height: 1.6,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

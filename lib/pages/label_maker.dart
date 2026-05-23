@@ -1,368 +1,206 @@
+import 'dart:convert';
+
 import 'package:esc_pos_utils/esc_pos_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../services/db_service.dart';
+import '../services/printer_service.dart';
 import '../widgets/app_preferences.dart';
 
 class LabelMaker extends StatefulWidget {
-  const LabelMaker({super.key});
+  final VoidCallback? onConnectPressed;
+  const LabelMaker({super.key, this.onConnectPressed});
 
   @override
   State<LabelMaker> createState() => _LabelMakerState();
 }
 
 class _LabelMakerState extends State<LabelMaker> {
-  bool includeLink = false;
-  BluetoothDevice? connectedDevice;
   bool isCheckingConnection = true;
-  final TextEditingController qrController = TextEditingController(
-    text: "The quick brown fox jumps over the lazy dog is a famous English pangram—a sentence containing every letter of the alphabet. Coined in the late 19th century, it is widely used for typing practice, testing keyboards, and displaying fonts due to its comprehensive use of all 26 letters. ",
-  );
+
+  final TextEditingController _controller = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _autoReconnectPrinter();
+    PrinterService.deviceNotifier.addListener(_onDeviceChange);
+    _init();
   }
 
-  // ===============================
-  // AUTO RECONNECT SAVED PRINTER
-  // ===============================
-  Future<void> _autoReconnectPrinter() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedId = prefs.getString('saved_printer_id');
+  @override
+  void dispose() {
+    PrinterService.deviceNotifier.removeListener(_onDeviceChange);
+    _controller.dispose();
+    super.dispose();
+  }
 
-    if (savedId == null) {
-      setState(() => isCheckingConnection = false);
+  void _onDeviceChange() => setState(() {});
+
+  Future<void> _init() async {
+    await PrinterService.autoReconnect();
+    if (mounted) setState(() => isCheckingConnection = false);
+  }
+
+  String _sanitize(String input) =>
+      input.replaceAll(RegExp(r'[^\x00-\x7F]'), '');
+
+  Future<void> _print() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        _snackBar("ENTER TEXT BEFORE PRINTING"),
+      );
       return;
     }
 
-    try {
-      final bondedDevices = await FlutterBluePlus.bondedDevices;
-
-      final device = bondedDevices.firstWhere((d) => d.remoteId.str == savedId);
-
-      if (!device.isConnected) {
-        await device.connect(autoConnect: false);
-      }
-
-      connectedDevice = device;
-    } catch (e) {
-      connectedDevice = null;
-    }
-
-    setState(() => isCheckingConnection = false);
-  }
-
-  Future<void> _sendInChunks(
-    BluetoothCharacteristic characteristic,
-    List<int> data,
-  ) async {
-    const chunkSize = 20;
-
-    for (int i = 0; i < data.length; i += chunkSize) {
-      final end = (i + chunkSize > data.length) ? data.length : i + chunkSize;
-
-      await characteristic.write(data.sublist(i, end), withoutResponse: true);
-
-      await Future.delayed(const Duration(milliseconds: 50));
-    }
-  }
-
-  // ===============================
-  // PRINT FUNCTION
-  // ===============================
-  Future<void> _printLabel(String qrText) async {
-    if (connectedDevice == null) return;
+    HapticFeedback.mediumImpact();
+    _showLoadingDialog();
 
     try {
-      List<BluetoothService> services = await connectedDevice!
-          .discoverServices();
-
-      for (var service in services) {
-        for (var characteristic in service.characteristics) {
-          if (characteristic.properties.write) {
-            // Simple ESC/POS print
-
-            final profile = await CapabilityProfile.load();
-            final paperSize = AppPreferences.is58mm ? PaperSize.mm58 : PaperSize.mm80;
-
-            final generator = Generator(paperSize, profile);
-
-            List<int> bytes = [];
-            bytes += generator.reset();
-            //bytes += generator.text("Device Name:");
-
-            bytes += generator.feed(AppPreferences.leadingFeed.toInt());
-
-            // bytes += generator.qrcode(
-            //   qrData,
-            //   size: QRSize.Size8, // 🔥 increase size
-            //   cor: QRCorrection.H, // high error correction
-            // );
-
-            // if (includeLink) {
-            //   bytes += generator.feed(2);
-            //   bytes += generator.text(
-            //     qrText,
-            //     styles: const PosStyles(
-            //       align: PosAlign.center,
-            //       //bold: true,
-            //       //height: PosTextSize.size2,
-            //       //width: PosTextSize.size2,
-            //     ),
-            //   );
-            // }
-
-            bytes += generator.text(
-              sanitizeText(qrText),
-              styles: const PosStyles(
-                align: PosAlign.center,
-                //bold: true,
-                //height: PosTextSize.size2,
-                //width: PosTextSize.size2,
-              ),
-            );
-
-            bytes += generator.feed(AppPreferences.trailingFeed.toInt());
-
-            bytes += generator.cut();
-
-            _showLoadingDialog();
-            await _sendInChunks(characteristic, bytes);
-            Navigator.of(context).pop(); // close dialog
-
-            //await characteristic.write(bytes, withoutResponse: true);
-            return;
-          }
-        }
+      final characteristic = await PrinterService.findWritableCharacteristic();
+      if (!mounted) return;
+      if (characteristic == null) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          _snackBar("NO WRITABLE CHARACTERISTIC FOUND"),
+        );
+        return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No writable characteristic found")),
+      final profile = await CapabilityProfile.load();
+      final paperSize =
+          AppPreferences.is58mm ? PaperSize.mm58 : PaperSize.mm80;
+      final generator = Generator(paperSize, profile);
+
+      List<int> bytes = [];
+      bytes += generator.reset();
+      bytes += generator.feed(AppPreferences.leadingFeed.toInt());
+      bytes += generator.text(
+        _sanitize(text),
+        styles: const PosStyles(align: PosAlign.center),
+      );
+      bytes += generator.feed(AppPreferences.trailingFeed.toInt());
+      bytes += generator.cut();
+
+      await PrinterService.sendInChunks(characteristic, bytes);
+      if (mounted) Navigator.of(context).pop();
+
+      await DbService.addHistory(
+        type: 'label',
+        preview: text.length > 60 ? '${text.substring(0, 60)}…' : text,
       );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Print failed")));
-      print(e);
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(_snackBar("PRINT FAILED"));
+      }
     }
   }
 
-  String sanitizeText(String input) {
-    return input.replaceAll(RegExp(r'[^\x00-\x7F]'), '');
+  Future<void> _showTemplates() async {
+    final templates = await DbService.getTemplates('label');
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        side: BorderSide(color: Colors.black12),
+      ),
+      builder: (_) => _TemplateSheet(
+        templates: templates,
+        onLoad: (dataJson) {
+          Navigator.pop(context);
+          final data = jsonDecode(dataJson) as Map<String, dynamic>;
+          _controller.text = data['text'] as String;
+          setState(() {});
+        },
+        onDelete: (id) async => DbService.deleteTemplate(id),
+        onSave: () {
+          Navigator.pop(context);
+          _saveTemplate();
+        },
+      ),
+    );
+  }
+
+  Future<void> _saveTemplate() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        _snackBar("ENTER TEXT BEFORE SAVING TEMPLATE"),
+      );
+      return;
+    }
+    final nameController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => _NameDialog(controller: nameController),
+    );
+    if (confirmed != true || nameController.text.trim().isEmpty) return;
+    await DbService.saveTemplate(
+      type: 'label',
+      name: nameController.text.trim(),
+      dataJson: jsonEncode({'text': text}),
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(_snackBar("TEMPLATE SAVED"));
+    }
   }
 
   void _showLoadingDialog() {
     showDialog(
       context: context,
-      barrierDismissible: false, // prevents closing manually
-      builder: (_) => Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: const BorderSide(color: Colors.black, width: 1.5),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                "PRINTING...",
-                style: GoogleFonts.spaceMono(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.8,
-                  color: Colors.black,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      barrierDismissible: false,
+      builder: (_) => _PrintingDialog(),
     );
   }
 
+  SnackBar _snackBar(String text) => SnackBar(
+        content: Text(text, textAlign: TextAlign.center),
+        duration: const Duration(seconds: 2),
+      );
+
   @override
   Widget build(BuildContext context) {
-    // ===============================
-    // LOADING SCREEN
-    // ===============================
-    if (isCheckingConnection) {
-      return Scaffold(body: Center(
-          child:
-          Padding(
-            padding: EdgeInsetsGeometry.symmetric(horizontal: 25),
-            child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: Colors.black,
-                  width: 1.5,
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    "Attempting to connect to previously saved printer.",
-                    textAlign: TextAlign.center,
-                    softWrap: true,
-                    style: GoogleFonts.spaceMono(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                      color: Colors.black,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ),
-      ),
-      );
-    }
+    if (isCheckingConnection) return _buildConnecting();
 
-    // ===============================
-    // NO PRINTER CONNECTED
-    // ===============================
-    if (connectedDevice == null) {
-      return Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
-            child: Container(
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.black, width: 1.5),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.print_outlined,
-                    size: 48,
-                    color: Colors.black,
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    "NO PRINTER CONNECTED",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontFamily: "SpaceMono",
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.5,
-                      color: Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    "Navigate to the Connect Printer section, and connect a printer to continue!",
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.spaceMono(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.6,
-                      color: Colors.black,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-    // ===============================
-    // QR PRINT SCREEN
-    // ===============================
+    final device = PrinterService.connectedDevice;
+    if (device == null) return _buildNoPrinter();
+
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.black),
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              connectedDevice!.platformName.toUpperCase(),
-              style: GoogleFonts.spaceMono(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
-                color: Colors.black,
-              ),
-            ),
-            Text(
-              "CONNECTED",
-              style: GoogleFonts.spaceMono(
-                fontSize: 10,
-                letterSpacing: 1.2,
-                color: Colors.black54,
-              ),
-            ),
-          ],
-        ),
-        // bottom: const PreferredSize(
-        //   preferredSize: Size.fromHeight(1),
-        //   child: Divider(
-        //     height: 1,
-        //     thickness: 1,
-        //     color: Colors.black,
-        //   ),
-        // ),
+        title: _connectedTitle(device),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.layers_outlined, color: Colors.black),
+            tooltip: 'Templates',
+            onPressed: _showTemplates,
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: ListView(
           children: [
             TextField(
-              controller: qrController,
-              onChanged: (_) {
-                setState(() {});
-              },
+              controller: _controller,
+              onChanged: (_) => setState(() {}),
               minLines: 7,
               maxLines: 7,
-              // 👈 allows expansion
               keyboardType: TextInputType.multiline,
               cursorColor: Colors.black,
-              style: GoogleFonts.spaceMono(
-                fontSize: 13,
-                letterSpacing: 0.5,
-                color: Colors.black,
-              ),
+              style: GoogleFonts.spaceMono(fontSize: 13, color: Colors.black),
               decoration: InputDecoration(
                 labelText: "ENTER TEXT FOR LABEL",
                 labelStyle: GoogleFonts.spaceMono(
@@ -391,105 +229,52 @@ class _LabelMakerState extends State<LabelMaker> {
                 ),
               ),
             ),
+
             const SizedBox(height: 20),
 
-            //generating the QR on UI
-            // if (qrController.text.isNotEmpty) ...[
-            //   Column(
-            //     children: [
-            //       Text(
-            //         "QR Preview",
-            //         textAlign: TextAlign.center,
-            //         style: GoogleFonts.spaceMono(
-            //           fontSize: 15,
-            //           letterSpacing: 1.2,
-            //           color: Colors.black,
-            //         ),
-            //       ),
-            //
-            //       QrImageView(data: qrController.text, size: 200),
-            //       if (includeLink) ...[
-            //         Text(
-            //           qrController.text,
-            //           textAlign: TextAlign.center,
-            //           style: GoogleFonts.spaceMono(
-            //             fontSize: 15,
-            //             letterSpacing: 1.2,
-            //             color: Colors.black87,
-            //           ),
-            //         ),
-            //       ],
-            //     ],
-            //   ),
-            // ],
-
-            const Spacer(),
-            const SizedBox(height: 30),
-            // GestureDetector(
-            //   onTap: () {
-            //     setState(() {
-            //       includeLink = !includeLink;
-            //     });
-            //   },
-            //   child: AnimatedContainer(
-            //     duration: const Duration(milliseconds: 150),
-            //     padding: const EdgeInsets.symmetric(vertical: 18),
-            //     decoration: BoxDecoration(
-            //       color: includeLink ? Colors.black : Colors.white,
-            //       borderRadius: BorderRadius.circular(4),
-            //       border: Border.all(color: Colors.black, width: 1.5),
-            //     ),
-            //     child: Center(
-            //       child: Text(
-            //         includeLink ? "TEXT INCLUDED" : "INCLUDE TEXT",
-            //         style: GoogleFonts.spaceMono(
-            //           fontSize: 12,
-            //           fontWeight: FontWeight.bold,
-            //           letterSpacing: 0.8,
-            //           color: includeLink ? Colors.white : Colors.black,
-            //         ),
-            //       ),
-            //     ),
-            //   ),
-            // ),
-
-            //SizedBox(height: 10),
+            if (_controller.text.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.black12, width: 1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      "QR PREVIEW",
+                      style: GoogleFonts.spaceMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.5,
+                        color: Colors.black38,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    QrImageView(
+                      data: _controller.text,
+                      size: 180,
+                      backgroundColor: Colors.white,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      "This is how the text scans as a QR code.",
+                      style: GoogleFonts.spaceMono(
+                        fontSize: 9,
+                        color: Colors.black38,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
 
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () {
-                  if (qrController.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor: Colors.white,
-                        elevation: 0,
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          side: const BorderSide(
-                            color: Colors.black,
-                            width: 1.5,
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        content: Text(
-                          "ENTER TEXT BEFORE PRINTING",
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.spaceMono(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.8,
-                            color: Colors.black,
-                          ),
-                        ),
-                        duration: Duration(seconds: 1),
-                      ),
-                    );
-                    return;
-                  }
-
-                  _printLabel(qrController.text.trim());
-                },
+                onPressed: _print,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: Colors.black,
@@ -502,28 +287,407 @@ class _LabelMakerState extends State<LabelMaker> {
                     side: const BorderSide(color: Colors.black, width: 1.5),
                   ),
                   elevation: 0,
-                  disabledBackgroundColor: Colors.white,
-                  disabledForegroundColor: Colors.black38,
                 ),
-                icon: const Icon(
-                  Icons.label,
-                  color: Colors.black,
-                  size: 20,
-                ),
+                icon: const Icon(Icons.label, size: 20),
                 label: Text(
                   "Print Label",
-                  textAlign: TextAlign.center,
                   style: GoogleFonts.spaceMono(
-                    fontSize: 20,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    letterSpacing: 0.6,
-                    color: Colors.black,
                   ),
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _connectedTitle(BluetoothDevice device) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          device.platformName.toUpperCase(),
+          style: GoogleFonts.spaceMono(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+            color: Colors.black,
+          ),
+        ),
+        Text(
+          "CONNECTED",
+          style: GoogleFonts.spaceMono(
+            fontSize: 9,
+            letterSpacing: 1.2,
+            color: Colors.green,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConnecting() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.black, width: 1.5),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                "Connecting to saved printer...",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.spaceMono(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoPrinter() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Container(
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.black, width: 1.5),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.print_disabled_outlined,
+                  size: 48, color: Colors.black38),
+              const SizedBox(height: 20),
+              Text(
+                "NO PRINTER CONNECTED",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.spaceMono(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                "Connect a Bluetooth printer to start printing.",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.spaceMono(
+                  fontSize: 11,
+                  color: Colors.black54,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: widget.onConnectPressed,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    elevation: 0,
+                  ),
+                  icon: const Icon(Icons.bluetooth_searching, size: 18),
+                  label: Text(
+                    "Go to Connect Printer",
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Reused dialogs (imported from receipt.dart via barrel) ────────────────────
+
+class _PrintingDialog extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Colors.black, width: 1.5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              "PRINTING...",
+              style: GoogleFonts.spaceMono(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+                color: Colors.black,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NameDialog extends StatelessWidget {
+  final TextEditingController controller;
+  const _NameDialog({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Colors.black, width: 1.5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "SAVE TEMPLATE",
+              style: GoogleFonts.spaceMono(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              cursorColor: Colors.black,
+              style: GoogleFonts.spaceMono(fontSize: 13),
+              decoration: InputDecoration(
+                hintText: "Template name",
+                hintStyle: GoogleFonts.spaceMono(
+                    fontSize: 13, color: Colors.black38),
+                enabledBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.black, width: 1.5),
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
+                ),
+                focusedBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.black, width: 2),
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.black),
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    child: Text(
+                      "CANCEL",
+                      style: GoogleFonts.spaceMono(
+                          fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    child: Text(
+                      "SAVE",
+                      style: GoogleFonts.spaceMono(
+                          fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TemplateSheet extends StatefulWidget {
+  final List<Map<String, dynamic>> templates;
+  final void Function(String dataJson) onLoad;
+  final Future<void> Function(int id) onDelete;
+  final VoidCallback onSave;
+
+  const _TemplateSheet({
+    required this.templates,
+    required this.onLoad,
+    required this.onDelete,
+    required this.onSave,
+  });
+
+  @override
+  State<_TemplateSheet> createState() => _TemplateSheetState();
+}
+
+class _TemplateSheetState extends State<_TemplateSheet> {
+  late List<Map<String, dynamic>> _templates;
+
+  @override
+  void initState() {
+    super.initState();
+    _templates = List.from(widget.templates);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.black12,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "TEMPLATES",
+                style: GoogleFonts.spaceMono(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: widget.onSave,
+                icon:
+                    const Icon(Icons.save_alt, size: 16, color: Colors.black),
+                label: Text(
+                  "Save Current",
+                  style: GoogleFonts.spaceMono(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black),
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 16, color: Colors.black12),
+          if (_templates.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text(
+                  "No saved templates yet.",
+                  style: GoogleFonts.spaceMono(
+                      fontSize: 12, color: Colors.black38),
+                ),
+              ),
+            )
+          else
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.4,
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: _templates.length,
+                separatorBuilder: (context, index) =>
+                    const Divider(height: 1, color: Colors.black12),
+                itemBuilder: (_, i) {
+                  final t = _templates[i];
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading:
+                        const Icon(Icons.layers_outlined, size: 20),
+                    title: Text(
+                      t['name'] as String,
+                      style: GoogleFonts.spaceMono(
+                          fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline,
+                          size: 18, color: Colors.black38),
+                      onPressed: () async {
+                        await widget.onDelete(t['id'] as int);
+                        setState(() => _templates.removeAt(i));
+                      },
+                    ),
+                    onTap: () => widget.onLoad(t['data_json'] as String),
+                  );
+                },
+              ),
+            ),
+        ],
       ),
     );
   }
