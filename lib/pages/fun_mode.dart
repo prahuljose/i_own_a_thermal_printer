@@ -1,13 +1,54 @@
-import 'package:esc_pos_utils/esc_pos_utils.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:image_picker/image_picker.dart';
 
-import '../services/db_service.dart';
-import '../services/image_utils.dart';
 import '../services/printer_service.dart';
-import '../widgets/app_preferences.dart';
+import 'fun_modes/badge_mode.dart';
+import 'fun_modes/big_text_mode.dart';
+import 'fun_modes/countdown_mode.dart';
+import 'fun_modes/doodle_mode.dart';
+import 'fun_modes/fortune_mode.dart';
+import 'fun_modes/note_mode.dart';
+import 'fun_modes/polaroid_mode.dart';
+import 'fun_modes/stamps_mode.dart';
+
+enum _Tool {
+  stamps,
+  fortune,
+  bigText,
+  polaroid,
+  note,
+  badge,
+  doodle,
+  countdown,
+}
+
+class _ToolDef {
+  final _Tool id;
+  final IconData icon;
+  final String name;
+  final String description;
+
+  const _ToolDef(this.id, this.icon, this.name, this.description);
+}
+
+const _tools = [
+  _ToolDef(_Tool.stamps, Icons.approval_outlined, 'Stamps',
+      'VOID, APPROVED, TOP SECRET…'),
+  _ToolDef(_Tool.fortune, Icons.auto_awesome_outlined, 'Fortune',
+      'Random fortune cookie'),
+  _ToolDef(
+      _Tool.bigText, Icons.format_size, 'Big Text', 'Max-size bold message'),
+  _ToolDef(_Tool.polaroid, Icons.photo_camera_outlined, 'Polaroid',
+      'Photo with caption'),
+  _ToolDef(_Tool.note, Icons.sticky_note_2_outlined, 'Sticky Note',
+      'Title + body text'),
+  _ToolDef(_Tool.badge, Icons.badge_outlined, 'Name Badge',
+      'Name · role · event'),
+  _ToolDef(
+      _Tool.doodle, Icons.draw_outlined, 'Doodle', 'Draw and print anything'),
+  _ToolDef(_Tool.countdown, Icons.timer_outlined, 'Countdown',
+      'Days until any date'),
+];
 
 class FunMode extends StatefulWidget {
   final VoidCallback? onConnectPressed;
@@ -18,9 +59,8 @@ class FunMode extends StatefulWidget {
 }
 
 class _FunModeState extends State<FunMode> {
-  Uint8List? _imageBytes;
-  bool isCheckingConnection = true;
-  bool _isPrinting = false;
+  bool _isCheckingConnection = true;
+  _Tool? _activeTool;
 
   @override
   void initState() {
@@ -39,383 +79,70 @@ class _FunModeState extends State<FunMode> {
 
   Future<void> _init() async {
     await PrinterService.autoReconnect();
-    if (mounted) setState(() => isCheckingConnection = false);
+    if (mounted) setState(() => _isCheckingConnection = false);
   }
 
-  Future<void> _pickImage(ImageSource source) async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: source, maxWidth: 1200);
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    if (mounted) setState(() => _imageBytes = bytes);
-  }
-
-  void _removeImage() => setState(() => _imageBytes = null);
-
-  Future<void> _print() async {
-    if (_imageBytes == null) return;
-
-    HapticFeedback.mediumImpact();
-    setState(() => _isPrinting = true);
-
-    try {
-      final characteristic = await PrinterService.findWritableCharacteristic();
-      if (!mounted) return;
-      if (characteristic == null) {
-        setState(() => _isPrinting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          _snackBar("NO WRITABLE CHARACTERISTIC FOUND"),
-        );
-        return;
-      }
-
-      // 384 dots for 58mm, 576 for 80mm (byte-aligned, exact printer DPI)
-      final targetWidth = AppPreferences.is58mm ? 384 : 576;
-
-      // Heavy processing (decode → orient → resize → grayscale → F-S dither)
-      // runs in a background isolate so the UI stays responsive.
-      final prepared = await prepareImageForPrint(
-        _imageBytes!,
-        targetWidth,
-        maxHeight: 800,
-      );
-      if (!mounted) return;
-      if (prepared == null) {
-        setState(() => _isPrinting = false);
-        ScaffoldMessenger.of(context).showSnackBar(_snackBar("IMAGE ERROR"));
-        return;
-      }
-
-      final profile = await CapabilityProfile.load();
-      if (!mounted) return;
-
-      final paperSize =
-          AppPreferences.is58mm ? PaperSize.mm58 : PaperSize.mm80;
-      final generator = Generator(paperSize, profile);
-
-      List<int> bytes = [];
-      bytes += generator.reset();
-      bytes += generator.feed(AppPreferences.leadingFeed.toInt());
-      // imageRaster (GS v 0) sends the full bitmap in one block — the printer
-      // buffers it and prints continuously with no strip-by-strip pauses.
-      bytes += generator.imageRaster(prepared);
-      bytes += generator.feed(AppPreferences.trailingFeed.toInt());
-      bytes += generator.cut();
-
-      await PrinterService.sendInChunks(characteristic, bytes);
-
-      if (mounted) {
-        setState(() => _isPrinting = false);
-        ScaffoldMessenger.of(context).showSnackBar(_snackBar("PRINTED!"));
-      }
-
-      await DbService.addHistory(
-        type: 'label',
-        preview: 'Fun Mode image print',
-      );
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isPrinting = false);
-        ScaffoldMessenger.of(context).showSnackBar(_snackBar("PRINT FAILED"));
-      }
-    }
-  }
-
-  SnackBar _snackBar(String text) => SnackBar(
-        content: Text(text, textAlign: TextAlign.center),
-        duration: const Duration(seconds: 2),
-      );
+  void _open(_Tool tool) => setState(() => _activeTool = tool);
+  void _back() => setState(() => _activeTool = null);
 
   @override
   Widget build(BuildContext context) {
-    if (isCheckingConnection) return _buildConnecting();
+    if (_isCheckingConnection) return _buildConnecting();
 
     final device = PrinterService.connectedDevice;
     if (device == null) return _buildNoPrinter();
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        iconTheme: const IconThemeData(color: Colors.black),
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              device.platformName.toUpperCase(),
-              style: GoogleFonts.spaceMono(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
-                color: Colors.black,
-              ),
-            ),
-            Text(
-              "CONNECTED",
-              style: GoogleFonts.spaceMono(
-                fontSize: 9,
-                letterSpacing: 1.2,
-                color: Colors.green,
-              ),
-            ),
-          ],
-        ),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Image preview area
-            Expanded(
-              child: _imageBytes != null
-                  ? _buildPreview()
-                  : _buildPickerPlaceholder(),
-            ),
+    if (_activeTool != null) return _buildTool(_activeTool!);
 
-            const SizedBox(height: 16),
+    return _buildHub();
+  }
 
-            // Pick buttons row
-            if (_imageBytes == null) ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: _pickButton(
-                      icon: Icons.photo_library_outlined,
-                      label: "Gallery",
-                      onTap: () => _pickImage(ImageSource.gallery),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _pickButton(
-                      icon: Icons.camera_alt_outlined,
-                      label: "Camera",
-                      onTap: () => _pickImage(ImageSource.camera),
-                    ),
-                  ),
-                ],
-              ),
-            ] else ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _isPrinting ? null : _removeImage,
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.black, width: 1.5),
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      icon: const Icon(Icons.close, size: 18),
-                      label: Text(
-                        "Remove",
-                        style: GoogleFonts.spaceMono(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _isPrinting
-                          ? null
-                          : () => _pickImage(ImageSource.gallery),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.black, width: 1.5),
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      icon: const Icon(Icons.swap_horiz, size: 18),
-                      label: Text(
-                        "Change",
-                        style: GoogleFonts.spaceMono(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _isPrinting ? null : _print,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    elevation: 0,
-                    disabledBackgroundColor: Colors.black38,
-                  ),
-                  icon: _isPrinting
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Icon(Icons.print_rounded, size: 20),
-                  label: Text(
-                    _isPrinting ? "PRINTING..." : "Print Image",
-                    style: GoogleFonts.spaceMono(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
+  Widget _buildHub() {
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 1.15,
       ),
+      itemCount: _tools.length,
+      itemBuilder: (context, i) {
+        final tool = _tools[i];
+        return _ToolCard(
+          def: tool,
+          onTap: () => _open(tool.id),
+        );
+      },
     );
   }
 
-  Widget _buildPreview() {
-    return Column(
-      children: [
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.black12, width: 1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.memory(
-                  _imageBytes!,
-                  fit: BoxFit.contain,
-                ),
-                // Grayscale overlay hint
-                Positioned(
-                  bottom: 10,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        "Prints in grayscale · ${AppPreferences.is58mm ? '58mm' : '80mm'} width",
-                        style: GoogleFonts.spaceMono(
-                          fontSize: 10,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPickerPlaceholder() {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F8F8),
-        border: Border.all(color: Colors.black12, width: 1.5),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.image_outlined,
-            size: 56,
-            color: Colors.black26,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            "Select an image to print",
-            style: GoogleFonts.spaceMono(
-              fontSize: 13,
-              color: Colors.black38,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            "Full paper width · Grayscale dithered",
-            style: GoogleFonts.spaceMono(
-              fontSize: 10,
-              color: Colors.black26,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _pickButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 18),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.black, width: 1.5),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 24, color: Colors.black),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: GoogleFonts.spaceMono(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  Widget _buildTool(_Tool tool) {
+    switch (tool) {
+      case _Tool.stamps:
+        return StampsMode(onBack: _back);
+      case _Tool.fortune:
+        return FortuneMode(onBack: _back);
+      case _Tool.bigText:
+        return BigTextMode(onBack: _back);
+      case _Tool.polaroid:
+        return PolaroidMode(onBack: _back);
+      case _Tool.note:
+        return NoteMode(onBack: _back);
+      case _Tool.badge:
+        return BadgeMode(onBack: _back);
+      case _Tool.doodle:
+        return DoodleMode(onBack: _back);
+      case _Tool.countdown:
+        return CountdownMode(onBack: _back);
+    }
   }
 
   Widget _buildConnecting() => Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
@@ -474,7 +201,7 @@ class _FunModeState extends State<FunMode> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  "Connect a Bluetooth printer to start printing.",
+                  "Connect a Bluetooth printer to use Fun Mode.",
                   textAlign: TextAlign.center,
                   style: GoogleFonts.spaceMono(
                     fontSize: 11,
@@ -511,4 +238,58 @@ class _FunModeState extends State<FunMode> {
           ),
         ),
       );
+}
+
+class _ToolCard extends StatelessWidget {
+  final _ToolDef def;
+  final VoidCallback onTap;
+
+  const _ToolCard({required this.def, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.black12, width: 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF4F4F4),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(def.icon, size: 20, color: Colors.black),
+            ),
+            const Spacer(),
+            Text(
+              def.name,
+              style: GoogleFonts.spaceMono(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.3,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              def.description,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.spaceMono(
+                fontSize: 9,
+                color: Colors.black38,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

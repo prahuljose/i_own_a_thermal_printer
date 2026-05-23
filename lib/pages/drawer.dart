@@ -12,6 +12,7 @@ import 'package:i_own_a_thermal_printer/services/printer_service.dart';
 
 import 'fun_mode.dart';
 import 'label_maker.dart';
+import 'love_page.dart';
 
 enum AppView {
   home,
@@ -65,7 +66,7 @@ class _DrawerPageState extends State<DrawerPage> {
       case AppView.history:
         return const HistoryPage();
       case AppView.love:
-        return const Center(child: Text("Show some love <3"));
+        return const LovePage();
     }
   }
 
