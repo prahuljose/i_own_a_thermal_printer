@@ -112,38 +112,6 @@ class LovePage extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 20),
-
-          GestureDetector(
-            onTap: () => _open('https://github.com/prahuljose'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 12,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.star_outline_rounded,
-                      color: Colors.white, size: 16),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Star on GitHub',
-                    style: GoogleFonts.spaceMono(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
           const SizedBox(height: 28),
 
           Text(
@@ -216,8 +184,6 @@ class _LinkTile extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios_rounded,
-                size: 12, color: Colors.black26),
           ],
         ),
       ),
